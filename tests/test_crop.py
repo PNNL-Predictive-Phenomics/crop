@@ -1,8 +1,8 @@
 """Test functionalities for removing reactions to prevent growth."""
 
 import cobra
-from cobra import Model, Reaction, Metabolite
 import pytest
+from cobra import Metabolite, Model, Reaction
 
 
 def create_test_model():
