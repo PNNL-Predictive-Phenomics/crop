@@ -83,9 +83,9 @@ def create_test_model():
     glycolysis.name = 'Simplified glycolysis'
     glycolysis.add_metabolites({
         metabolites['g6p_c']: -1,
-        metabolites['adp_c']: -2,
+        metabolites['adp_c']: -1,
         metabolites['pyr_c']: 2,
-        metabolites['atp_c']: 4 # Net gain of 2 ATP (used 1 in HEX, gained 4 here)
+        metabolites['atp_c']: 1 # Net gain of 2 ATP (used 1 in HEX, gained 4 here)
     })
     reactions.append(glycolysis)
     
@@ -94,8 +94,9 @@ def create_test_model():
     lac_util.name = 'Lactose utilization (EXTRA - should be removed)'
     lac_util.add_metabolites({
         metabolites['lac_c']: -1,
+        metabolites['atp_c']: -1,
         metabolites['g6p_c']: 1,
-        metabolites['atp_c']: 1  # Unrealistic direct conversion
+        metabolites['adp_c']: 1  # Unrealistic direct conversion
     })
     reactions.append(lac_util)
     
@@ -105,7 +106,8 @@ def create_test_model():
     biomass.add_metabolites({
         metabolites['pyr_c']: -0.2,
         metabolites['atp_c']: -0.3,
-        metabolites['biomass']: 1
+        metabolites['biomass']: 1,
+        metabolites['adp_c']: 0.3
     })
     reactions.append(biomass)
     
@@ -119,7 +121,7 @@ def create_test_model():
     # ATP maintenance (to prevent unrealistic ATP accumulation)
     atp_maintenance = Reaction('ATPM')
     atp_maintenance.name = 'ATP maintenance'
-    atp_maintenance.lower_bound = 0.1  # Force some ATP consumption
+    atp_maintenance.lower_bound = -5.0  # Force some ATP consumption
     atp_maintenance.add_metabolites({
         metabolites['atp_c']: -1,
         metabolites['adp_c']: 1
@@ -131,7 +133,8 @@ def create_test_model():
     
     # Set objective
     model.objective = 'BIOMASS'
-    
+    for rxn in model.reactions:
+        print(f"Reaction {rxn.id}: {rxn.name}\t{rxn.build_reaction_string()}")
     return model
 
 def apply_medium(model, medium_dict):
