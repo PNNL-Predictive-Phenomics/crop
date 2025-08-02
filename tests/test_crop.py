@@ -177,7 +177,10 @@ def phenotype_data():
     """Fixture providing phenotype observation data"""
     return {
         "glucose": {"observed": "growth", "predicted": "growth"},  # Correct
-        "lactose": {"observed": "no_growth", "predicted": "growth"},  # Incorrect - needs fixing
+        "lactose": {
+            "observed": "no_growth",
+            "predicted": "growth",
+        },  # Incorrect - needs fixing
         "no_carbon": {"observed": "no_growth", "predicted": "no_growth"},  # Correct
     }
 
@@ -197,7 +200,9 @@ def test_initial_glucose_growth(test_model, media_conditions):
     solution = glucose_model.optimize()
 
     assert solution.status == "optimal"
-    assert solution.objective_value > 0.001, "Error, the initial model should grow on glucose"
+    assert solution.objective_value > 0.001, (
+        "Error, the initial model should grow on glucose"
+    )
 
 
 def test_initial_lactose_growth_incorrect(test_model, media_conditions):
@@ -206,25 +211,27 @@ def test_initial_lactose_growth_incorrect(test_model, media_conditions):
     solution = lactose_model.optimize()
 
     assert solution.status == "optimal"
-    assert (
-        solution.objective_value > 0.001
-    ), "Error, the initial model should grow on lactose due to LACutil reaction"
+    assert solution.objective_value > 0.001, (
+        "Error, the initial model should grow on lactose due to LACutil reaction"
+    )
 
 
 def test_no_carbon_no_growth(test_model, media_conditions):
     """Test that the model doesn't grow without carbon source"""
     no_carbon_model = apply_medium(test_model, media_conditions["no_carbon"])
     solution = no_carbon_model.optimize()
-    assert (
-        solution.objective_value < 0.001
-    ), "Error, the initial model should not grow without carbon source "
+    assert solution.objective_value < 0.001, (
+        "Error, the initial model should not grow without carbon source "
+    )
 
 
 @pytest.mark.parametrize(
     "medium_name,expected_growth",
     [("glucose", True), ("lactose", True), ("no_carbon", False)],  # Initially incorrect
 )
-def test_initial_growth_patterns(test_model, media_conditions, medium_name, expected_growth):
+def test_initial_growth_patterns(
+    test_model, media_conditions, medium_name, expected_growth
+):
     """Parametrized test for initial growth patterns"""
     model_with_medium = apply_medium(test_model, media_conditions[medium_name])
     solution = model_with_medium.optimize()
@@ -241,7 +248,9 @@ def test_reaction_removal_fixes_lactose(
     """Test that removing the problematic reaction prevents lactose growth"""
     # Remove the problematic reaction
     model_corrected = test_model.copy()
-    model_corrected.reactions.get_by_id(expected_problematic_reaction).remove_from_model()
+    model_corrected.reactions.get_by_id(
+        expected_problematic_reaction
+    ).remove_from_model()
 
     # Test that lactose no longer supports growth
     lactose_model = apply_medium(model_corrected, media_conditions["lactose"])
@@ -256,7 +265,9 @@ def test_reaction_removal_preserves_glucose_growth(
     """Test that removing the problematic reaction doesn't affect glucose growth"""
     # Remove the problematic reaction
     model_corrected = test_model.copy()
-    model_corrected.reactions.get_by_id(expected_problematic_reaction).remove_from_model()
+    model_corrected.reactions.get_by_id(
+        expected_problematic_reaction
+    ).remove_from_model()
 
     # Test that glucose still works
     glucose_model = apply_medium(model_corrected, media_conditions["glucose"])
@@ -284,7 +295,9 @@ def test_growth_after_reaction_removal(
     """Parametrized test for growth patterns after removing problematic reaction"""
     # Remove the problematic reaction
     model_corrected = test_model.copy()
-    model_corrected.reactions.get_by_id(expected_problematic_reaction).remove_from_model()
+    model_corrected.reactions.get_by_id(
+        expected_problematic_reaction
+    ).remove_from_model()
 
     # Test growth in specified medium
     model_with_medium = apply_medium(model_corrected, media_conditions[medium_name])
@@ -321,23 +334,23 @@ def test_crop_algorithm_integration(
     # Verify the fix works
     lactose_model = apply_medium(model_corrected, media_conditions["lactose"])
     lactose_solution = lactose_model.optimize()
-    assert (
-        lactose_solution.objective_value < 0.001
-    ), f"Error, the model should not grow on lactose after removing {suggested_removals}"
+    assert lactose_solution.objective_value < 0.001, (
+        f"Error, the model should not grow on lactose after removing {suggested_removals}"
+    )
 
     # Verify other conditions still work
     glucose_model = apply_medium(model_corrected, media_conditions["glucose"])
     glucose_solution = glucose_model.optimize()
-    assert (
-        glucose_solution.objective_value > 0.001
-    ), f"Error, the model should still grow on glucose after removing {suggested_removals}"
+    assert glucose_solution.objective_value > 0.001, (
+        f"Error, the model should still grow on glucose after removing {suggested_removals}"
+    )
 
     # Verify no carbon condition
     no_carbon_model = apply_medium(model_corrected, media_conditions["no_carbon"])
     no_carbon_solution = no_carbon_model.optimize()
-    assert (
-        no_carbon_solution.objective_value < 0.001
-    ), f"Error, the model should not grow without carbon source after removing {suggested_removals}"
+    assert no_carbon_solution.objective_value < 0.001, (
+        f"Error, the model should not grow without carbon source after removing {suggested_removals}"
+    )
 
 
 def test_specific_reaction_exists(test_model, expected_problematic_reaction):
@@ -373,9 +386,9 @@ def test_complete_crop_workflow(
     # Step 1: Verify initial problematic behavior
     lactose_model = apply_medium(test_model, media_conditions["lactose"])
     initial_solution = lactose_model.optimize()
-    assert (
-        initial_solution.objective_value > 0.001
-    ), "Error, the initial model should grow on lactose"
+    assert initial_solution.objective_value > 0.001, (
+        "Error, the initial model should grow on lactose"
+    )
 
     # Step 2: Run CROP algorithm (simulated)
     # suggested_removals = run_crop_algorithm(test_model, phenotype_data, media_conditions)
@@ -390,28 +403,27 @@ def test_complete_crop_workflow(
     # Should no longer grow on lactose
     lactose_corrected = apply_medium(corrected_model, media_conditions["lactose"])
     lactose_solution = lactose_corrected.optimize()
-    assert (
-        lactose_solution.objective_value < 0.001
-    ), f"Error, the model should not grow on lactose after removing {suggested_removals}"
+    assert lactose_solution.objective_value < 0.001, (
+        f"Error, the model should not grow on lactose after removing {suggested_removals}"
+    )
 
     # Should still grow on glucose
     glucose_corrected = apply_medium(corrected_model, media_conditions["glucose"])
     glucose_solution = glucose_corrected.optimize()
-    assert (
-        glucose_solution.objective_value > 0.001
-    ), f"Error, the model should still grow on glucose after removing {suggested_removals}"
+    assert glucose_solution.objective_value > 0.001, (
+        f"Error, the model should still grow on glucose after removing {suggested_removals}"
+    )
 
     # Should not grow without carbon source
     no_carbon_corrected = apply_medium(corrected_model, media_conditions["no_carbon"])
     no_carbon_solution = no_carbon_corrected.optimize()
-    assert (
-        no_carbon_solution.objective_value < 0.001
-    ), f"Error, the model should not grow without carbon source after removing {suggested_removals}"
+    assert no_carbon_solution.objective_value < 0.001, (
+        f"Error, the model should not grow without carbon source after removing {suggested_removals}"
+    )
 
 
 # Example usage and manual testing
 if __name__ == "__main__":
-
     # Create and test the model manually
     model = create_test_model()
     media = {
@@ -430,7 +442,9 @@ if __name__ == "__main__":
     # Test lactose
     lactose_model = apply_medium(model, media["lactose"])
     sol = lactose_model.optimize()
-    print(f"Lactose growth: {sol.objective_value:.4f} (should be > 0, but this is wrong!)")
+    print(
+        f"Lactose growth: {sol.objective_value:.4f} (should be > 0, but this is wrong!)"
+    )
 
     print("\n=== After Removing LACutil Reaction ===")
 
@@ -447,7 +461,6 @@ if __name__ == "__main__":
     lactose_model = apply_medium(model_fixed, media["lactose"])
     sol = lactose_model.optimize()
     # print(f"Lactose growth: {sol.objective_value:.4f} (should now be ~0)")
-
     # print("\nTo run pytest tests, use:")
     # print("pytest test_crop_model.py -v")
     # print("pytest test_crop_model.py -v -k 'test_initial'  # Run only initial tests")
