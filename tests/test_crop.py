@@ -137,7 +137,7 @@ def create_test_model():
     model.objective = "BIOMASS"
     for rxn in model.reactions:
         print(f"Reaction {rxn.id}: {rxn.name}\t{rxn.build_reaction_string()}")
-    cobra.io.save_json_model(model, "test_crop_model.json")    
+    cobra.io.save_json_model(model, "test_crop_model.json")
     cobra.io.write_sbml_model(model, "test_crop_model.xml")
 
     return model
