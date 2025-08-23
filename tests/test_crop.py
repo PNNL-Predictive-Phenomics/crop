@@ -30,7 +30,7 @@ def create_test_model():
         "pyr_c": Metabolite("pyr_c", name="Pyruvate", compartment="c"),
         "atp_c": Metabolite("atp_c", name="ATP", compartment="c"),
         "adp_c": Metabolite("adp_c", name="ADP", compartment="c"),
-        "biomass": Metabolite("biomass", name="Biomass", compartment="c"),
+        "biomass_c": Metabolite("biomass_c", name="Biomass", compartment="c"),
     }
 
     # Create reactions
@@ -108,17 +108,17 @@ def create_test_model():
         {
             metabolites["pyr_c"]: -0.2,
             metabolites["atp_c"]: -0.3,
-            metabolites["biomass"]: 1,
+            metabolites["biomass_c"]: 1,
             metabolites["adp_c"]: 0.3,
         }
     )
     reactions.append(biomass)
 
-    biomass_exchange = Reaction("EX_biomass")
+    biomass_exchange = Reaction("EX_biomass_c")
     biomass_exchange.name = "Biomass exchange"
     biomass.add_metabolites(
         {
-            metabolites["biomass"]: -1,
+            metabolites["biomass_c"]: -1,
         }
     )
     reactions.append(biomass_exchange)
@@ -137,6 +137,9 @@ def create_test_model():
     model.objective = "BIOMASS"
     for rxn in model.reactions:
         print(f"Reaction {rxn.id}: {rxn.name}\t{rxn.build_reaction_string()}")
+    cobra.io.save_json_model(model, "test_crop_model.json")    
+    cobra.io.write_sbml_model(model, "test_crop_model.xml")
+
     return model
 
 
