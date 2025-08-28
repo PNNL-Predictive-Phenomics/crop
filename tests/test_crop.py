@@ -3,7 +3,7 @@
 import cobra
 import pytest
 from cobra import Metabolite, Model, Reaction
-
+from crop import run_crop_algorithm
 
 def create_test_model():
     """
@@ -40,14 +40,14 @@ def create_test_model():
     ex_glc = Reaction("EX_glc")
     ex_glc.name = "Glucose exchange"
     ex_glc.lower_bound = -10  # Can uptake up to 10 units
-    ex_glc.upper_bound = 1000
+    ex_glc.upper_bound = 100
     ex_glc.add_metabolites({metabolites["glc_e"]: -1})
     reactions.append(ex_glc)
 
     ex_lac = Reaction("EX_lac")
     ex_lac.name = "Lactose exchange"
     ex_lac.lower_bound = -10  # Can uptake up to 10 units
-    ex_lac.upper_bound = 1000
+    ex_lac.upper_bound = 100
     ex_lac.add_metabolites({metabolites["lac_e"]: -1})
     reactions.append(ex_lac)
 
@@ -81,9 +81,9 @@ def create_test_model():
     glycolysis.add_metabolites(
         {
             metabolites["g6p_c"]: -1,
-            metabolites["adp_c"]: -1,
+            metabolites["adp_c"]: -3,
             metabolites["pyr_c"]: 2,
-            metabolites["atp_c"]: 1,  # Net gain of 2 ATP (used 1 in HEX, gained 4 here)
+            metabolites["atp_c"]: 3,  # Net gain of 2 ATP (used 1 in HEX, gained 4 here)
         }
     )
     reactions.append(glycolysis)
@@ -99,6 +99,8 @@ def create_test_model():
             metabolites["adp_c"]: 1,  # Unrealistic direct conversion
         }
     )
+    lac_util.upper_bound = 9
+
     reactions.append(lac_util)
 
     # Biomass reaction
@@ -106,12 +108,13 @@ def create_test_model():
     biomass.name = "Biomass formation"
     biomass.add_metabolites(
         {
-            metabolites["pyr_c"]: -0.2,
-            metabolites["atp_c"]: -0.3,
+            metabolites["pyr_c"]: -2,
+            metabolites["atp_c"]: -1,
             metabolites["biomass_c"]: 1,
-            metabolites["adp_c"]: 0.3,
+            metabolites["adp_c"]: 1,
         }
     )
+    biomass.upper_bound = 100
     reactions.append(biomass)
 
     biomass_exchange = Reaction("EX_biomass_c")
@@ -126,7 +129,8 @@ def create_test_model():
     # ATP maintenance (to prevent unrealistic ATP accumulation)
     atp_maintenance = Reaction("ATPM")
     atp_maintenance.name = "ATP maintenance"
-    atp_maintenance.lower_bound = -5.0  # Force some ATP consumption
+    atp_maintenance.upper_bound = 100.0  # Force some ATP production
+    atp_maintenance.lower_bound = 0.0
     atp_maintenance.add_metabolites({metabolites["atp_c"]: -1, metabolites["adp_c"]: 1})
     reactions.append(atp_maintenance)
 
@@ -135,10 +139,12 @@ def create_test_model():
 
     # Set objective
     model.objective = "BIOMASS"
-    for rxn in model.reactions:
-        print(f"Reaction {rxn.id}: {rxn.name}\t{rxn.build_reaction_string()}")
-    cobra.io.save_json_model(model, "test_crop_model.json")
-    cobra.io.write_sbml_model(model, "test_crop_model.xml")
+    #for rxn in model.reactions:
+        #print(
+        #    f"Reaction {rxn.id}: {rxn.name}\t{rxn.build_reaction_string()}\t{rxn.lower_bound} < {rxn.upper_bound}"
+        #)
+    #cobra.io.save_json_model(model, "test_crop_model.json")
+    #cobra.io.write_sbml_model(model, "test_crop_model.xml")
 
     return model
 
@@ -384,8 +390,8 @@ def test_complete_crop_workflow(
     ), "Error, the initial model should grow on lactose"
 
     # Step 2: Run CROP algorithm (simulated)
-    # suggested_removals = run_crop_algorithm(test_model, phenotype_data, media_conditions)
-    suggested_removals = [expected_problematic_reaction]  # Simulated result
+    suggested_removals, _ = run_crop_algorithm(test_model, phenotype_data, media_conditions)
+    #suggested_removals = [expected_problematic_reaction]  # Simulated result
 
     # Step 3: Apply suggested changes
     corrected_model = test_model.copy()
