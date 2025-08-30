@@ -16,6 +16,7 @@ def run_crop_algorithm(
     """
     Run the CROP algorithm on the test model with the given phenotype data and media conditions.
     """
+    phenotype_conditions = build_phenotype_conditions(media_conditions, phenotype_data)
     # Set the media conditions
     S = cobra.util.array.create_stoichiometric_matrix(test_crop_model, array_type="DataFrame")
     nmets, nrxns = S.shape
@@ -100,3 +101,71 @@ def run_crop_algorithm(
         raise ValueError("Infeasible problem")
     suggested_removals = solution['z'].index[solution['z'].eq(0)].tolist()
     return suggested_removals, solution
+
+
+def build_phenotype_conditions(
+    media_conditions: dict,
+    phenotype_data: dict,
+    growth_condition: str | None = None,
+    nogrowth_condition: str | None = None,
+) -> dict:
+    """
+    Transform media_conditions and phenotype_data into phenotype_conditions.
+
+    - media_conditions: mapping of condition -> {exchange_rxn: lower_bound}
+      e.g., negative values allow uptake (COBRA convention).
+    - phenotype_data: mapping of condition -> {"observed": "...", "predicted": "..."}.
+
+    Selects:
+      growth: observed == "growth" and predicted == "growth"
+      nogrowth: observed == "no_growth" and predicted == "growth"
+
+    Flips sign for uptakes: phenotype_conditions stores magnitudes (positive).
+    Any non-uptake (>= 0) in media becomes 0.0 in phenotype_conditions.
+
+    Optional growth_condition / nogrowth_condition let you pick specific names;
+    otherwise the first match is used.
+    """
+    def obs_key(d: dict) -> str:
+        # be tolerant if data uses "observation" instead of "observed"
+        return d.get("observed", d.get("observation", ""))
+
+    # Find candidate condition names
+    growth_candidates = [
+        name for name, ph in phenotype_data.items()
+        if obs_key(ph) == "growth" and ph.get("predicted") == "growth" and name in media_conditions
+    ]
+    nogrowth_candidates = [
+        name for name, ph in phenotype_data.items()
+        if obs_key(ph) in ("no_growth", "nogrowth") and ph.get("predicted") == "growth" and name in media_conditions
+    ]
+
+    if growth_condition is None:
+        if not growth_candidates:
+            raise ValueError("No growth condition found where observed==growth and predicted==growth.")
+        growth_condition = growth_candidates[0]
+    elif growth_condition not in media_conditions:
+        raise KeyError(f"Growth condition '{growth_condition}' not in media_conditions.")
+
+    if nogrowth_condition is None:
+        if not nogrowth_candidates:
+            raise ValueError("No nogrowth condition found where observed==no_growth and predicted==growth.")
+        nogrowth_condition = nogrowth_candidates[0]
+    elif nogrowth_condition not in media_conditions:
+        raise KeyError(f"Nogrowth condition '{nogrowth_condition}' not in media_conditions.")
+
+    # Include all exchange rxns that appear in any media condition so keys are consistent
+    all_exchanges = set().union(*[mc.keys() for mc in media_conditions.values()])
+
+    def to_pheno(m: dict) -> dict:
+        # Flip sign for allowed uptakes (negative in media -> positive magnitude here), else 0.0
+        return {rxn: float(-m.get(rxn, 0)) if m.get(rxn, 0) < 0 else 0.0 for rxn in all_exchanges}
+
+    growth_map = to_pheno(media_conditions[growth_condition])
+    nogrowth_map = to_pheno(media_conditions[nogrowth_condition])
+
+    return {"growth": growth_map, "nogrowth": nogrowth_map}
+
+# Example with your data:
+# phenotype_conditions = build_phenotype_conditions(media_conditions(), phenotype_data())
+# print(phenotype_conditions)

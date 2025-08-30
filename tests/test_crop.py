@@ -5,7 +5,152 @@ import pytest
 from cobra import Metabolite, Model, Reaction
 from crop import run_crop_algorithm
 
+
 def create_test_model():
+    """
+    Creates a simple test model that incorrectly grows on lactose due to an extra reaction.
+
+    The model should:
+    - Grow on glucose (correct behavior)
+    - Grow on lactose (incorrect - due to extra LACutil reaction)
+
+    After removing the LACutil reaction:
+    - Still grow on glucose
+    - No longer grow on lactose
+    """
+
+    model = Model("test_crop_model")
+
+    # Create metabolites
+    metabolites = {
+        "glc_e": Metabolite("glc_e", name="Glucose external", compartment="e"),
+        "lac_e": Metabolite("lac_e", name="Lactose external", compartment="e"),
+        "glc_c": Metabolite("glc_c", name="Glucose cytoplasm", compartment="c"),
+        "lac_c": Metabolite("lac_c", name="Lactose cytoplasm", compartment="c"),
+        "g6p_c": Metabolite("g6p_c", name="Glucose-6-phosphate", compartment="c"),
+        "pyr_c": Metabolite("pyr_c", name="Pyruvate", compartment="c"),
+        "atp_c": Metabolite("atp_c", name="ATP", compartment="c"),
+        "adp_c": Metabolite("adp_c", name="ADP", compartment="c"),
+        "biomass_c": Metabolite("biomass_c", name="Biomass", compartment="c"),
+    }
+
+    # Create reactions
+    reactions = []
+
+    # Exchange reactions
+    ex_glc = Reaction("EX_glc")
+    ex_glc.name = "Glucose exchange"
+    ex_glc.lower_bound = -10  # Can uptake up to 10 units
+    ex_glc.upper_bound = 100
+    ex_glc.add_metabolites({metabolites["glc_e"]: -1})
+    reactions.append(ex_glc)
+
+    ex_lac = Reaction("EX_lac")
+    ex_lac.name = "Lactose exchange"
+    ex_lac.lower_bound = -10  # Can uptake up to 10 units
+    ex_lac.upper_bound = 100
+    ex_lac.add_metabolites({metabolites["lac_e"]: -1})
+    reactions.append(ex_lac)
+
+    # Transport reactions
+    glc_transport = Reaction("GLCt")
+    glc_transport.name = "Glucose transport"
+    glc_transport.add_metabolites({metabolites["glc_e"]: -1, metabolites["glc_c"]: 1})
+    reactions.append(glc_transport)
+
+    lac_transport = Reaction("LACt")
+    lac_transport.name = "Lactose transport"
+    lac_transport.add_metabolites({metabolites["lac_e"]: -1, metabolites["lac_c"]: 1})
+    reactions.append(lac_transport)
+
+    # Glucose metabolism (correct pathway)
+    hexokinase = Reaction("HEX")
+    hexokinase.name = "Hexokinase"
+    hexokinase.add_metabolites(
+        {
+            metabolites["glc_c"]: -1,
+            metabolites["atp_c"]: -1,
+            metabolites["g6p_c"]: 1,
+            metabolites["adp_c"]: 1,
+        }
+    )
+    reactions.append(hexokinase)
+
+    # Simplified glycolysis
+    glycolysis = Reaction("GLYC")
+    glycolysis.name = "Simplified glycolysis"
+    glycolysis.add_metabolites(
+        {
+            metabolites["g6p_c"]: -1,
+            metabolites["adp_c"]: -3,
+            metabolites["pyr_c"]: 2,
+            metabolites["atp_c"]: 3,  # Net gain of 2 ATP (used 1 in HEX, gained 4 here)
+        }
+    )
+    reactions.append(glycolysis)
+
+    # EXTRA REACTION - This shouldn't exist and allows incorrect lactose growth
+    lac_util = Reaction("LACutil")
+    lac_util.name = "Lactose utilization (EXTRA - should be removed)"
+    lac_util.add_metabolites(
+        {
+            metabolites["lac_c"]: -1,
+            metabolites["atp_c"]: -1,
+            metabolites["g6p_c"]: 1,
+            metabolites["adp_c"]: 1,  # Unrealistic direct conversion
+        }
+    )
+    lac_util.upper_bound = 9
+
+    reactions.append(lac_util)
+
+    # Biomass reaction
+    biomass = Reaction("BIOMASS")
+    biomass.name = "Biomass formation"
+    biomass.add_metabolites(
+        {
+            metabolites["pyr_c"]: -2,
+            metabolites["atp_c"]: -1,
+            metabolites["biomass_c"]: 1,
+            metabolites["adp_c"]: 1,
+        }
+    )
+    biomass.upper_bound = 100
+    reactions.append(biomass)
+
+    biomass_exchange = Reaction("EX_biomass_c")
+    biomass_exchange.name = "Biomass exchange"
+    biomass.add_metabolites(
+        {
+            metabolites["biomass_c"]: -1,
+        }
+    )
+    reactions.append(biomass_exchange)
+
+    # ATP maintenance (to prevent unrealistic ATP accumulation)
+    atp_maintenance = Reaction("ATPM")
+    atp_maintenance.name = "ATP maintenance"
+    atp_maintenance.upper_bound = 100.0  # Force some ATP production
+    atp_maintenance.lower_bound = 0.0
+    atp_maintenance.add_metabolites({metabolites["atp_c"]: -1, metabolites["adp_c"]: 1})
+    reactions.append(atp_maintenance)
+
+    # Add all reactions to model
+    model.add_reactions(reactions)
+
+    # Set objective
+    model.objective = "BIOMASS"
+    for rxn in model.reactions:
+        print(
+            f"Reaction {rxn.id}: {rxn.name}\t{rxn.build_reaction_string()}\t{rxn.lower_bound} < {rxn.upper_bound}"
+        )
+    cobra.io.save_json_model(model, "test_crop_model.json")
+    cobra.io.write_sbml_model(model, "test_crop_model.xml")
+
+    return model
+
+
+def create_old_test_model():
     """
     Creates a simple test model that incorrectly grows on lactose due to an extra reaction.
 
