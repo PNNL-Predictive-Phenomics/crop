@@ -3,8 +3,8 @@
 import cobra
 import pytest
 from cobra import Metabolite, Model, Reaction
-from crop import run_crop_algorithm
-
+from crop import run_crop_algorithm, build_phenotype_conditions
+import sys
 
 def create_test_model():
     """
@@ -339,7 +339,169 @@ def phenotype_data():
     }
 
 
+@pytest.fixture(scope="module")
+def build():
+    """
+    Provide build_phenotype_conditions via relative import, stubbing heavy deps first.
+    """
+    # Stub cvxpy to satisfy "from cvxpy import Minimize, Problem, Variable, diag"
+    if "cvxpy" not in sys.modules:
+        cvxpy_stub = types.ModuleType("cvxpy")
+        # Minimal placeholders; not used in these tests
+        setattr(cvxpy_stub, "Minimize", object)
+        setattr(cvxpy_stub, "Problem", object)
+        setattr(cvxpy_stub, "Variable", object)
+        setattr(cvxpy_stub, "diag", lambda x: x)
+        sys.modules["cvxpy"] = cvxpy_stub
+
+    # Stub cobra to satisfy "import cobra" at module import time
+    if "cobra" not in sys.modules:
+        cobra_stub = types.ModuleType("cobra")
+        sys.modules["cobra"] = cobra_stub
+
+    return build_phenotype_conditions
+
+
+@pytest.fixture
+def media_conditions():
+    return {
+        "glucose": {"EX_glc": -10.0, "EX_lac": 0.0},
+        "lactose": {"EX_glc": 0.0, "EX_lac": -5.0, "EX_other": -2.0},
+        "no_carbon": {"EX_glc": 0.0, "EX_lac": 0.0},
+    }
+
+
+@pytest.fixture
+def phenotype_data():
+    return {
+        "glucose": {"observed": "growth", "predicted": "growth"},
+        "lactose": {"observed": "no_growth", "predicted": "growth"},
+        "no_carbon": {"observed": "no_growth", "predicted": "no_growth"},
+    }
+
+
+@pytest.fixture
+def phenotype_observation_key():
+    # Uses "observation" key instead of "observed"
+    return {
+        "glucose": {"observation": "growth", "predicted": "growth"},
+        "lactose": {"observation": "no_growth", "predicted": "growth"},
+    }
+
 # Test functions
+
+def test_basic_mapping_and_keys(build, media_conditions, phenotype_data):
+    result = build(media_conditions, phenotype_data)
+    assert "growth" in result and "nogrowth" in result
+
+    growth = result["growth"]
+    nogrowth = result["nogrowth"]
+
+    # Union of all exchanges from all media should be present in both maps
+    expected_keys = {"EX_glc", "EX_lac", "EX_other"}
+    assert set(growth.keys()) == expected_keys
+    assert set(nogrowth.keys()) == expected_keys
+
+    # Growth condition chosen should be "glucose" -> EX_glc uptake magnitude 10, others 0
+    assert growth["EX_glc"] == 10.0
+    assert growth["EX_lac"] == 0.0
+    assert growth["EX_other"] == 0.0
+
+    # Nogrowth condition chosen should be "lactose" -> EX_lac 5, EX_other 2, EX_glc 0
+    assert nogrowth["EX_glc"] == 0.0
+    assert nogrowth["EX_lac"] == 5.0
+    assert nogrowth["EX_other"] == 2.0
+
+
+def test_observation_key_supported(build, media_conditions, phenotype_observation_key):
+    result = build(media_conditions, phenotype_observation_key)
+    growth = result["growth"]
+    nogrowth = result["nogrowth"]
+
+    # Should behave the same as if "observed" was used
+    assert growth["EX_glc"] == 10.0
+    assert growth["EX_lac"] == 0.0
+    assert nogrowth["EX_glc"] == 0.0
+    assert nogrowth["EX_lac"] == 5.0
+
+
+def test_select_specific_conditions(build, media_conditions, phenotype_data):
+    # Add another valid growth condition
+    media_plus = dict(media_conditions)
+    media_plus["glucose_weak"] = {"EX_glc": -7.0}
+    pheno_plus = dict(phenotype_data)
+    pheno_plus["glucose_weak"] = {"observed": "growth", "predicted": "growth"}
+
+    result = build(
+        media_plus,
+        pheno_plus,
+        growth_condition="glucose_weak",
+        nogrowth_condition="lactose",
+    )
+    growth = result["growth"]
+    nogrowth = result["nogrowth"]
+
+    # Selected explicit growth condition should reflect -7 -> +7 magnitude
+    assert growth["EX_glc"] == 7.0
+    # Keys from union should still appear
+    assert "EX_lac" in growth and "EX_other" in growth
+    # Selected explicit nogrowth condition should be lactose as before
+    assert nogrowth["EX_lac"] == 5.0
+
+
+def test_invalid_growth_condition_keyerror(build, media_conditions, phenotype_data):
+    with pytest.raises(KeyError):
+        build(media_conditions, phenotype_data, growth_condition="does_not_exist")
+
+
+def test_invalid_nogrowth_condition_keyerror(build, media_conditions, phenotype_data):
+    with pytest.raises(KeyError):
+        build(media_conditions, phenotype_data, nogrowth_condition="not_in_media")
+
+
+def test_no_growth_candidate_raises(build):
+    media = {"A": {"EX_a": -1.0}}
+    # No case with observed==growth and predicted==growth
+    pheno = {
+        "A": {"observed": "no_growth", "predicted": "growth"},
+        "B": {"observed": "growth", "predicted": "no_growth"},
+    }
+    with pytest.raises(ValueError):
+        build(media, pheno)
+
+
+def test_no_nogrowth_candidate_raises(build):
+    media = {"glucose": {"EX_glc": -10.0}, "lactose": {"EX_lac": -5.0}}
+    # No case with observed in {no_growth, nogrowth} and predicted==growth
+    pheno = {
+        "glucose": {"observed": "growth", "predicted": "growth"},
+        "lactose": {"observed": "no_growth", "predicted": "no_growth"},
+    }
+    with pytest.raises(ValueError):
+        build(media, pheno)
+
+
+def test_union_of_exchanges_included(build):
+    media = {
+        "c1": {"EX_a": -3.0},     # only EX_a here
+        "c2": {"EX_b": -4.0},     # only EX_b here
+    }
+    pheno = {
+        "c1": {"observed": "growth", "predicted": "growth"},
+        "c2": {"observed": "no_growth", "predicted": "growth"},
+    }
+    result = build(media, pheno)
+    growth = result["growth"]
+    nogrowth = result["nogrowth"]
+
+    # Both maps must include both EX_a and EX_b
+    assert set(growth.keys()) == {"EX_a", "EX_b"}
+    assert set(nogrowth.keys()) == {"EX_a", "EX_b"}
+
+    # Magnitudes flip sign for uptakes, zero otherwise
+    assert growth["EX_a"] == 3.0 and growth["EX_b"] == 0.0
+    assert nogrowth["EX_b"] == 4.0 and nogrowth["EX_a"] == 0.0
+
 def test_model_creation(test_model):
     """Test that the model is created correctly"""
     assert len(test_model.reactions) > 0
@@ -609,3 +771,5 @@ if __name__ == "__main__":
     # print("pytest test_crop_model.py -v")
     # print("pytest test_crop_model.py -v -k 'test_initial'  # Run only initial tests")
     # print("pytest test_crop_model.py -v -m integration     # Run only integration tests")
+
+
