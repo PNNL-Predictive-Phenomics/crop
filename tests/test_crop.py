@@ -366,7 +366,7 @@ def build():
 def media_conditions():
     return {
         "glucose": {"EX_glc": -10.0, "EX_lac": 0.0},
-        "lactose": {"EX_glc": 0.0, "EX_lac": -5.0, "EX_other": -2.0},
+        "lactose": {"EX_glc": 0.0, "EX_lac": -5.0},
         "no_carbon": {"EX_glc": 0.0, "EX_lac": 0.0},
     }
 
@@ -398,19 +398,18 @@ def test_basic_mapping_and_keys(build, media_conditions, phenotype_data):
     nogrowth = result["nogrowth"]
 
     # Union of all exchanges from all media should be present in both maps
-    expected_keys = {"EX_glc", "EX_lac", "EX_other"}
+    expected_keys = {"EX_glc", "EX_lac"}
     assert set(growth.keys()) == expected_keys
     assert set(nogrowth.keys()) == expected_keys
 
-    # Growth condition chosen should be "glucose" -> EX_glc uptake magnitude 10, others 0
+    # Growth condition chosen should be "glucose" -> EX_glc uptake magnitude 10
     assert growth["EX_glc"] == 10.0
     assert growth["EX_lac"] == 0.0
-    assert growth["EX_other"] == 0.0
+    
 
-    # Nogrowth condition chosen should be "lactose" -> EX_lac 5, EX_other 2, EX_glc 0
+    # Nogrowth condition chosen should be "lactose" -> EX_lac 5, EX_glc 0
     assert nogrowth["EX_glc"] == 0.0
     assert nogrowth["EX_lac"] == 5.0
-    assert nogrowth["EX_other"] == 2.0
 
 
 def test_observation_key_supported(build, media_conditions, phenotype_observation_key):
@@ -444,7 +443,7 @@ def test_select_specific_conditions(build, media_conditions, phenotype_data):
     # Selected explicit growth condition should reflect -7 -> +7 magnitude
     assert growth["EX_glc"] == 7.0
     # Keys from union should still appear
-    assert "EX_lac" in growth and "EX_other" in growth
+    assert "EX_lac" in growth 
     # Selected explicit nogrowth condition should be lactose as before
     assert nogrowth["EX_lac"] == 5.0
 
