@@ -623,10 +623,10 @@ def test_crop_algorithm_integration(
     """
 
     # This is where you would call your CROP algorithm
-    # suggested_removals = run_crop_algorithm(test_model, phenotype_data, media_conditions)
+    suggested_removals, _ = run_crop_algorithm(test_model, phenotype_data, media_conditions)
 
     # For now, simulate the expected result
-    suggested_removals = ["LACutil"]
+    #suggested_removals = ["LACutil"]
 
     # Test that CROP suggests the correct reaction for removal
     assert expected_problematic_reaction in suggested_removals
@@ -698,7 +698,7 @@ def test_complete_crop_workflow(
     # Step 2: Run CROP algorithm (simulated)
     suggested_removals, _ = run_crop_algorithm(test_model, phenotype_data, media_conditions)
     #suggested_removals = [expected_problematic_reaction]  # Simulated result
-
+    #assert expected_problematic_reaction in suggested_removals
     # Step 3: Apply suggested changes
     corrected_model = test_model.copy()
     for reaction_id in suggested_removals:

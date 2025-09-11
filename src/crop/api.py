@@ -16,6 +16,7 @@ def run_crop_algorithm(
     """
     Run the CROP algorithm on the test model with the given phenotype data and media conditions.
     """
+    np.random.seed(42)  # For reproducibility
     phenotype_conditions = build_phenotype_conditions(media_conditions, phenotype_data)
     # Set the media conditions
     S = cobra.util.array.create_stoichiometric_matrix(test_crop_model, array_type="DataFrame")
@@ -61,9 +62,15 @@ def run_crop_algorithm(
             for rxn in test_crop_model.reactions
         }
     )
-    nogrowth_carbon_source = [
-        carbon_source for carbon_source in phenotype_conditions["nogrowth"] if carbon_source != 0
-    ][0]
+    nogrowth_carbon_sources = [
+        carbon_source for carbon_source, uptake_rate in phenotype_conditions["nogrowth"].items()
+        if uptake_rate != 0
+    ]
+    print(f"Phenotype conditions: {phenotype_conditions}")
+    print(f"Media conditions: {media_conditions}")
+    print(f"Phenotype data: {phenotype_data}")
+    print(f"nogrowth carbon sources: {nogrowth_carbon_sources}")
+    nogrowth_carbon_source = sorted(nogrowth_carbon_sources)[0]
     # growth_carbon_source = [carbon_source for carbon_source in media_conditions['growth']
     #                         if carbon_source !=0][0]
     nogrowth_carbon_source_idx = lower_bound_nogrowth.index.get_loc(nogrowth_carbon_source)
@@ -92,14 +99,17 @@ def run_crop_algorithm(
     )  # w_{ATP} \geq \text{atp maintenance} \\
     # z\in \{0,1\} \\
     # \end{array}\end{equation}$$
-    problem.solve()
+    problem.solve(verbose=True, solver='GUROBI')
     solution = pd.DataFrame(
         {"r": r.value, "z": z.value, "v_nogrowth": v_nogrowth.value, "v_growth": v_growth.value},
         index=S.columns,
     )
     if problem.status != "optimal":
         raise ValueError("Infeasible problem")
-    suggested_removals = solution['z'].index[solution['z'].eq(0)].tolist()
+    zero_z = np.isclose(solution['z'], 0)
+    print(f"Zero Z: ")
+    print(solution['z'])
+    suggested_removals = solution['z'].index[zero_z].tolist()
     return suggested_removals, solution
 
 
