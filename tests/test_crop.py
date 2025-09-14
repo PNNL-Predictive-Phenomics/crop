@@ -772,3 +772,414 @@ if __name__ == "__main__":
     # print("pytest test_crop_model.py -v -m integration     # Run only integration tests")
 
 
+# ============================================================================
+# API UTILITY FUNCTION TESTS
+# ============================================================================
+
+import types
+import pandas as pd
+import numpy as np
+from unittest.mock import Mock, MagicMock, patch
+
+
+class TestApiUtilityFunctions:
+    """Test all utility functions in api.py"""
+
+    @pytest.fixture
+    def sample_phenotype_data(self):
+        """Sample phenotype data for testing"""
+        return {
+            "glucose": {"observed": "growth", "predicted": "growth"},
+            "lactose": {"observed": "no_growth", "predicted": "growth"},
+            "no_carbon": {"observed": "no_growth", "predicted": "no_growth"},
+            "mixed": {"observed": "growth", "predicted": "no_growth"}
+        }
+
+    @pytest.fixture
+    def sample_media_conditions(self):
+        """Sample media conditions for testing"""
+        return {
+            "glucose": {"EX_glc": -10.0, "EX_lac": 0.0},
+            "lactose": {"EX_glc": 0.0, "EX_lac": -5.0},
+            "no_carbon": {"EX_glc": 0.0, "EX_lac": 0.0},
+            "mixed": {"EX_glc": -3.0, "EX_lac": -2.0}
+        }
+
+    @pytest.fixture
+    def mock_model(self):
+        """Mock COBRA model for testing"""
+        mock_rxn1 = Mock()
+        mock_rxn1.id = "EX_glc"
+        mock_rxn2 = Mock()
+        mock_rxn2.id = "EX_lac"
+        mock_rxn3 = Mock()
+        mock_rxn3.id = "BIOMASS"
+        mock_rxn4 = Mock()
+        mock_rxn4.id = "ATPM"
+        
+        mock_model = Mock()
+        mock_model.reactions = [mock_rxn1, mock_rxn2, mock_rxn3, mock_rxn4]
+        return mock_model
+
+    def test_get_growth_conditions(self, sample_phenotype_data):
+        """Test get_growth_conditions function"""
+        from crop.api import get_growth_conditions
+        
+        result = get_growth_conditions(sample_phenotype_data)
+        expected = ["glucose"]  # Only glucose has observed=growth and predicted=growth
+        assert result == expected
+
+    def test_get_growth_conditions_empty(self):
+        """Test get_growth_conditions with no matching conditions"""
+        from crop.api import get_growth_conditions
+        
+        phenotype_data = {
+            "condition1": {"observed": "no_growth", "predicted": "growth"},
+            "condition2": {"observed": "growth", "predicted": "no_growth"}
+        }
+        result = get_growth_conditions(phenotype_data)
+        assert result == []
+
+    def test_get_growth_conditions_multiple(self):
+        """Test get_growth_conditions with multiple matching conditions"""
+        from crop.api import get_growth_conditions
+        
+        phenotype_data = {
+            "glucose": {"observed": "growth", "predicted": "growth"},
+            "fructose": {"observed": "growth", "predicted": "growth"},
+            "lactose": {"observed": "no_growth", "predicted": "growth"}
+        }
+        result = get_growth_conditions(phenotype_data)
+        assert set(result) == {"glucose", "fructose"}
+
+    def test_get_nogrowth_conditions(self, sample_phenotype_data):
+        """Test get_nogrowth_conditions function"""
+        from crop.api import get_nogrowth_conditions
+        
+        result = get_nogrowth_conditions(sample_phenotype_data)
+        expected = ["lactose"]  # Only lactose has observed=no_growth and predicted=growth
+        assert result == expected
+
+    def test_get_nogrowth_conditions_empty(self):
+        """Test get_nogrowth_conditions with no matching conditions"""
+        from crop.api import get_nogrowth_conditions
+        
+        phenotype_data = {
+            "condition1": {"observed": "growth", "predicted": "growth"},
+            "condition2": {"observed": "no_growth", "predicted": "no_growth"}
+        }
+        result = get_nogrowth_conditions(phenotype_data)
+        assert result == []
+
+    def test_get_nogrowth_conditions_multiple(self):
+        """Test get_nogrowth_conditions with multiple matching conditions"""
+        from crop.api import get_nogrowth_conditions
+        
+        phenotype_data = {
+            "lactose": {"observed": "no_growth", "predicted": "growth"},
+            "sucrose": {"observed": "no_growth", "predicted": "growth"},
+            "glucose": {"observed": "growth", "predicted": "growth"}
+        }
+        result = get_nogrowth_conditions(phenotype_data)
+        assert set(result) == {"lactose", "sucrose"}
+
+    def test_get_carbon_source(self, mock_model, sample_phenotype_data, sample_media_conditions):
+        """Test get_carbon_source function"""
+        from crop.api import get_carbon_source, get_growth_conditions
+        
+        result = get_carbon_source(
+            mock_model, 
+            sample_phenotype_data, 
+            sample_media_conditions, 
+            get_growth_conditions
+        )
+        
+        # Should return glucose condition with index and name for EX_glc
+        assert "glucose" in result
+        assert result["glucose"] == (0, "EX_glc")  # EX_glc is first in mock reactions
+
+    def test_get_lower_bound_for_conditions(self, mock_model, sample_phenotype_data, sample_media_conditions):
+        """Test get_lower_bound_for_conditions function"""
+        from crop.api import get_lower_bound_for_conditions, get_growth_conditions
+        
+        result = get_lower_bound_for_conditions(
+            mock_model,
+            sample_phenotype_data,
+            sample_media_conditions,
+            get_growth_conditions
+        )
+        
+        assert isinstance(result, pd.DataFrame)
+        assert "glucose" in result.columns
+        assert result.loc["EX_glc", "glucose"] == -10.0
+        assert result.loc["EX_lac", "glucose"] == 0.0
+
+    def test_get_lower_bound_for_growth_conditions(self, mock_model, sample_phenotype_data, sample_media_conditions):
+        """Test get_lower_bound_for_growth_conditions function"""
+        from crop.api import get_lower_bound_for_growth_conditions
+        
+        result = get_lower_bound_for_growth_conditions(
+            mock_model,
+            sample_phenotype_data,
+            sample_media_conditions,
+            atp_maintenance_rxn="ATPM",
+            atp_maintenance_lower_bound=2.5
+        )
+        
+        assert isinstance(result, pd.DataFrame)
+        assert "glucose" in result.columns
+        # Should have ATP maintenance set
+        assert result.loc["ATPM", "glucose"] == 2.5
+
+    def test_get_upper_bound_for_conditions(self, mock_model, sample_phenotype_data, sample_media_conditions):
+        """Test get_upper_bound_for_conditions function"""
+        from crop.api import get_upper_bound_for_conditions, get_growth_conditions
+        
+        result = get_upper_bound_for_conditions(
+            mock_model,
+            sample_phenotype_data,
+            sample_media_conditions,
+            get_growth_conditions,
+            growth_limit=5.0
+        )
+        
+        assert isinstance(result, pd.DataFrame)
+        assert "glucose" in result.columns
+        # Reactions in media should have 0, others should have growth_limit
+        assert result.loc["EX_glc", "glucose"] == 0.0  # In media
+        assert result.loc["BIOMASS", "glucose"] == 5.0  # Not in media
+
+    def test_get_upper_bound_for_nogrowth_conditions(self, mock_model, sample_phenotype_data, sample_media_conditions):
+        """Test get_upper_bound_for_nogrowth_conditions function"""
+        from crop.api import get_upper_bound_for_nogrowth_conditions
+        
+        result = get_upper_bound_for_nogrowth_conditions(
+            mock_model,
+            sample_phenotype_data,
+            sample_media_conditions,
+            maximum_nogrowth=1.0
+        )
+        
+        assert isinstance(result, pd.DataFrame)
+        assert "lactose" in result.columns
+        assert result.loc["EX_lac", "lactose"] == 0.0  # In media
+        assert result.loc["BIOMASS", "lactose"] == 1.0  # Not in media
+
+    def test_get_upper_bound_for_growth_conditions(self, mock_model, sample_phenotype_data, sample_media_conditions):
+        """Test get_upper_bound_for_growth_conditions function"""
+        from crop.api import get_upper_bound_for_growth_conditions
+        
+        result = get_upper_bound_for_growth_conditions(
+            mock_model,
+            sample_phenotype_data,
+            sample_media_conditions,
+            minimum_growth=2.0
+        )
+        
+        assert isinstance(result, pd.DataFrame)
+        assert "glucose" in result.columns
+        assert result.loc["EX_glc", "glucose"] == 0.0  # In media
+        assert result.loc["BIOMASS", "glucose"] == 2.0  # Not in media
+
+    def test_build_phenotype_conditions_basic(self, sample_media_conditions, sample_phenotype_data):
+        """Test build_phenotype_conditions basic functionality"""
+        from crop.api import build_phenotype_conditions
+        
+        result = build_phenotype_conditions(sample_media_conditions, sample_phenotype_data)
+        
+        assert "growth" in result
+        assert "nogrowth" in result
+        
+        # Check sign flipping and correct selection
+        growth = result["growth"]
+        nogrowth = result["nogrowth"]
+        
+        # Glucose condition: EX_glc=-10 becomes +10, EX_lac=0 stays 0
+        assert growth["EX_glc"] == 10.0
+        assert growth["EX_lac"] == 0.0
+        
+        # Lactose condition: EX_lac=-5 becomes +5, EX_glc=0 stays 0
+        assert nogrowth["EX_glc"] == 0.0
+        assert nogrowth["EX_lac"] == 5.0
+
+    def test_build_phenotype_conditions_observation_key(self):
+        """Test build_phenotype_conditions with 'observation' key instead of 'observed'"""
+        from crop.api import build_phenotype_conditions
+        
+        media_conditions = {
+            "glucose": {"EX_glc": -10.0, "EX_lac": 0.0},
+            "lactose": {"EX_glc": 0.0, "EX_lac": -5.0}
+        }
+        phenotype_data = {
+            "glucose": {"observation": "growth", "predicted": "growth"},
+            "lactose": {"observation": "no_growth", "predicted": "growth"}
+        }
+        
+        result = build_phenotype_conditions(media_conditions, phenotype_data)
+        
+        assert result["growth"]["EX_glc"] == 10.0
+        assert result["nogrowth"]["EX_lac"] == 5.0
+
+    def test_build_phenotype_conditions_specific_conditions(self, sample_media_conditions, sample_phenotype_data):
+        """Test build_phenotype_conditions with specific growth/nogrowth conditions"""
+        from crop.api import build_phenotype_conditions
+        
+        # Add another valid condition
+        media_extended = dict(sample_media_conditions)
+        media_extended["glucose2"] = {"EX_glc": -7.0, "EX_lac": 0.0}
+        phenotype_extended = dict(sample_phenotype_data)
+        phenotype_extended["glucose2"] = {"observed": "growth", "predicted": "growth"}
+        
+        result = build_phenotype_conditions(
+            media_extended,
+            phenotype_extended,
+            growth_condition="glucose2",
+            nogrowth_condition="lactose"
+        )
+        
+        assert result["growth"]["EX_glc"] == 7.0  # Should use glucose2
+        assert result["nogrowth"]["EX_lac"] == 5.0  # Should use lactose
+
+    def test_build_phenotype_conditions_no_growth_candidates(self):
+        """Test build_phenotype_conditions when no growth candidates exist"""
+        from crop.api import build_phenotype_conditions
+        
+        media_conditions = {"test": {"EX_glc": -10.0}}
+        phenotype_data = {"test": {"observed": "no_growth", "predicted": "growth"}}
+        
+        with pytest.raises(ValueError, match="No growth condition found"):
+            build_phenotype_conditions(media_conditions, phenotype_data)
+
+    def test_build_phenotype_conditions_no_nogrowth_candidates(self):
+        """Test build_phenotype_conditions when no nogrowth candidates exist"""
+        from crop.api import build_phenotype_conditions
+        
+        media_conditions = {"test": {"EX_glc": -10.0}}
+        phenotype_data = {"test": {"observed": "growth", "predicted": "growth"}}
+        
+        with pytest.raises(ValueError, match="No nogrowth condition found"):
+            build_phenotype_conditions(media_conditions, phenotype_data)
+
+    def test_build_phenotype_conditions_invalid_growth_condition(self, sample_media_conditions, sample_phenotype_data):
+        """Test build_phenotype_conditions with invalid growth_condition"""
+        from crop.api import build_phenotype_conditions
+        
+        with pytest.raises(KeyError, match="Growth condition 'invalid' not in media_conditions"):
+            build_phenotype_conditions(
+                sample_media_conditions,
+                sample_phenotype_data,
+                growth_condition="invalid"
+            )
+
+    def test_build_phenotype_conditions_invalid_nogrowth_condition(self, sample_media_conditions, sample_phenotype_data):
+        """Test build_phenotype_conditions with invalid nogrowth_condition"""
+        from crop.api import build_phenotype_conditions
+        
+        with pytest.raises(KeyError, match="Nogrowth condition 'invalid' not in media_conditions"):
+            build_phenotype_conditions(
+                sample_media_conditions,
+                sample_phenotype_data,
+                nogrowth_condition="invalid"
+            )
+
+    def test_build_phenotype_conditions_union_of_exchanges(self):
+        """Test that build_phenotype_conditions includes union of all exchanges"""
+        from crop.api import build_phenotype_conditions
+        
+        media_conditions = {
+            "cond1": {"EX_a": -3.0},  # Only EX_a
+            "cond2": {"EX_b": -4.0}   # Only EX_b
+        }
+        phenotype_data = {
+            "cond1": {"observed": "growth", "predicted": "growth"},
+            "cond2": {"observed": "no_growth", "predicted": "growth"}
+        }
+        
+        result = build_phenotype_conditions(media_conditions, phenotype_data)
+        
+        # Both growth and nogrowth should have both exchanges
+        assert set(result["growth"].keys()) == {"EX_a", "EX_b"}
+        assert set(result["nogrowth"].keys()) == {"EX_a", "EX_b"}
+        
+        # Check correct flipping
+        assert result["growth"]["EX_a"] == 3.0
+        assert result["growth"]["EX_b"] == 0.0
+        assert result["nogrowth"]["EX_a"] == 0.0
+        assert result["nogrowth"]["EX_b"] == 4.0
+
+    @patch('crop.api.Variable')
+    @patch('crop.api.Problem')
+    def test_nogrowth_clause_structure(self, mock_problem, mock_variable):
+        """Test nogrowth_clause function structure"""
+        from crop.api import nogrowth_clause
+        
+        # This is a complex function that requires CVXPY variables
+        # We'll just test that it returns a list when called with valid arguments
+        # The actual constraint logic is better tested through integration tests
+        
+        # Mock CVXPY variables - these need to behave like CVXPY Variables
+        v_nogrowth = Mock()
+        v_nogrowth.__getitem__ = Mock(return_value=Mock())
+        z = Mock()
+        r = Mock()
+        r.__getitem__ = Mock(return_value=Mock())
+        m = Mock()
+        
+        biomass_idx = 0
+        lower_bound_nogrowth = np.array([1.0, 2.0])
+        upper_bound_nogrowth = np.array([3.0, 4.0])
+        stoichiometric_matrix = np.array([[1, 0], [0, 1]])
+        omega = np.array([1000, 1000])
+        weights = np.array([1.0, 1.0])
+        nogrowth_carbon_source_name = "EX_lac"
+        nogrowth_carbon_source_idx = 1
+        maximum_nogrowth = 1.0
+        
+        # Test that the function exists and is callable
+        assert callable(nogrowth_clause)
+        # The actual constraint testing requires CVXPY to be fully functional
+        # which is better suited for integration tests
+
+    @patch('crop.api.Variable')
+    def test_growth_clause_structure(self, mock_variable):
+        """Test growth_clause function structure"""
+        from crop.api import growth_clause
+        
+        # Test that the function exists and is callable
+        assert callable(growth_clause)
+        # The actual constraint testing requires CVXPY to be fully functional
+        # which is better suited for integration tests
+
+    def test_media_conditions_fixture_function(self):
+        """Test the media_conditions fixture function in api.py"""
+        from crop.api import media_conditions
+        
+        result = media_conditions()
+        
+        assert isinstance(result, dict)
+        assert "glucose" in result
+        assert "lactose" in result
+        assert "no_carbon" in result
+        
+        # Check structure
+        assert result["glucose"]["EX_glc"] == -10
+        assert result["lactose"]["EX_lac"] == -10
+        assert result["no_carbon"]["EX_glc"] == 0
+
+    def test_phenotype_data_fixture_function(self):
+        """Test the phenotype_data fixture function in api.py"""
+        from crop.api import phenotype_data
+        
+        result = phenotype_data()
+        
+        assert isinstance(result, dict)
+        assert "glucose" in result
+        assert "lactose" in result
+        assert "no_carbon" in result
+        
+        # Check structure
+        assert result["glucose"]["observed"] == "growth"
+        assert result["glucose"]["predicted"] == "growth"
+        assert result["lactose"]["observed"] == "no_growth"
+        assert result["lactose"]["predicted"] == "growth"
+

@@ -179,3 +179,155 @@ def build_phenotype_conditions(
 # Example with your data:
 # phenotype_conditions = build_phenotype_conditions(media_conditions(), phenotype_data())
 # print(phenotype_conditions)
+
+
+def get_carbon_source(model: cobra.core.Model, phenotype_data: dict, media_conditions: dict, condition_function) -> dict:
+    """Get the carbon source for no growth conditions.
+    model: the cobra model
+    phenotype_data: the phenotype data
+    media_conditions: the media conditions
+    condition_function: the condition function (get_growth_conditions or get_nogrowth_conditions) that returns a list
+    :return: a dictionary mapping media conditions to their carbon source indices and names
+    """
+    return {
+        condition: [
+            ([rxn.id for rxn in model.reactions].index(carbon_source), carbon_source) for carbon_source in media_conditions[condition]
+        ][0] for condition in condition_function(phenotype_data)
+    }
+
+def get_lower_bound_for_conditions(model: cobra.core.Model, phenotype_data: dict, media_conditions: dict, condition_function) -> pd.DataFrame:
+    """Get the lower bound for the conditions.
+    """
+    return pd.DataFrame({
+        condition: pd.Series(
+            {
+                rxn.id: (
+                    media_conditions[condition][rxn.id]
+                    if rxn.id in media_conditions[condition]
+                    else 0
+                )
+                for rxn in model.reactions
+            }
+        )
+        for condition in condition_function(phenotype_data)
+    })
+
+def get_lower_bound_for_nogrowth_conditions(model, phenotype_data, media_conditions):
+    """Get the lower bound for nogrowth conditions."""
+    return get_lower_bound_for_conditions(model, phenotype_data, media_conditions, get_nogrowth_conditions)
+    
+
+def get_lower_bound_for_growth_conditions(model, phenotype_data, media_conditions, atp_maintenance_rxn, atp_maintenance_lower_bound):
+    """Get the lower bound for growth conditions."""
+    lower_bound_growth =  get_lower_bound_for_conditions(model, phenotype_data, media_conditions, get_growth_conditions)
+    for growth_condition in get_growth_conditions(phenotype_data):
+        if atp_maintenance_rxn in lower_bound_growth.index:
+            lower_bound_growth.loc[atp_maintenance_rxn] = atp_maintenance_lower_bound
+    return lower_bound_growth
+
+def get_upper_bound_for_conditions(model, phenotype_data, media_conditions, condition_function, growth_limit):
+    """Get the upper bound for the conditions."""
+    return pd.DataFrame({
+        condition: pd.Series(
+            {
+                rxn.id: (
+                    growth_limit
+                    if rxn.id not in media_conditions[condition]
+                    else 0
+                )
+                for rxn in model.reactions
+            }
+        )
+        for condition in condition_function(phenotype_data)
+    })
+
+def get_upper_bound_for_nogrowth_conditions(model: cobra.core.Model, phenotype_data: dict, media_conditions: dict, maximum_nogrowth: float) -> pd.DataFrame:
+    """Get the upper bound for nogrowth conditions."""
+    return get_upper_bound_for_conditions(model, phenotype_data, media_conditions, get_nogrowth_conditions, maximum_nogrowth)
+
+def get_upper_bound_for_growth_conditions(model: cobra.core.Model, phenotype_data: dict, media_conditions: dict, minimum_growth: float) -> pd.DataFrame:
+    """Get the upper bound for growth conditions."""
+    return get_upper_bound_for_conditions(model, phenotype_data, media_conditions, get_growth_conditions, minimum_growth)
+
+def get_growth_conditions(phenotype_data: dict) -> list:
+    """
+    Get the growth conditions for the CROP algorithm.
+    """
+    return [media_condition for media_condition, phenotype in phenotype_data.items()
+            if phenotype["observed"] == "growth" and phenotype["predicted"] == "growth"]
+
+def get_nogrowth_conditions(phenotype_data: dict) -> list:
+    """
+    Get the growth conditions for the CROP algorithm.
+    """
+    return [media_condition for media_condition, phenotype in phenotype_data.items()
+            if phenotype["observed"] == "no_growth" and phenotype["predicted"] == "growth"]
+
+def phenotype_data():
+    """Fixture providing phenotype observation data"""
+    return {
+        "glucose": {"observed": "growth", "predicted": "growth"},  # Correct
+        "lactose": {
+            "observed": "no_growth",
+            "predicted": "growth",
+        },  # Incorrect - needs fixing
+        "no_carbon": {"observed": "no_growth", "predicted": "no_growth"},  # Correct
+    }
+
+def media_conditions():
+    """Fixture providing different media conditions"""
+    return {
+        "glucose": {"EX_glc": -10, "EX_lac": 0},
+        "lactose": {"EX_glc": 0, "EX_lac": -10},
+        "no_carbon": {"EX_glc": 0, "EX_lac": 0},
+    }
+
+def nogrowth_clause(v_nogrowth: Variable, biomass_idx: int, 
+                    lower_bound_nogrowth: np.array, upper_bound_nogrowth: np.array, 
+                    stoichiometric_matrix: np.array, z: Variable, r: np.array, m: np.array, 
+                    omega: np.array, weights: np.array,  
+                    nogrowth_carbon_source_name: str, nogrowth_carbon_source_idx: int,
+                    maximum_nogrowth: float) -> list:
+    """Constraints that enforce no growth in nogrowth conditions.
+    v_nogrowth: Variable representing the flux of reactions in a no-growth condition. $v_{nogrowth}$
+    biomass_idx: Index of the biomass reaction. $v_{biomass}$
+    lower_bound_nogrowth: Lower bound for the exchange reactions. $L_{nogrowth}$
+    upper_bound_nogrowth: Upper bound for the internal reactions. $U_{nogrowth}$
+    stoichiometric_matrix: Stoichiometric matrix. $S$
+    z: Variable representing the binary decision about whether to include each reaction. $z$
+    r: Dual variable associated with the flux bounds. Positive means the upper bound is active. Negative means the lower bound is active.
+    m: Dual variable associated with the steady-state mass balance constraints for each metabolite.
+    omega: Upper bound on the the value of r.
+    weights: Weights that represent the amount of evidence supporting each reaction.
+    nogrowth_carbon_source_name: Name of the carbon source in the no-growth condition.
+    nogrowth_carbon_source_idx: Index of the carbon source in the no-growth condition.
+    maximum_nogrowth: Maximum allowed flux for the no-growth condition.
+    """
+
+    return [
+        v_nogrowth[biomass_idx] == lower_bound_nogrowth[nogrowth_carbon_source_name] * r[nogrowth_carbon_source_idx],  # & v_{biomass} = U_{nogrowth,lactose}r_{lactose} \\
+        stoichiometric_matrix @ v_nogrowth == 0,  # & Sv_{nogrowth}= 0 & \text{inner problem} \\
+        diag(lower_bound_nogrowth) @ z <= v_nogrowth,
+        v_nogrowth <= diag(upper_bound_nogrowth) @ z,  # & 0\leq v_i\leq U_{nogrowth,i}\cdot z_i & \text{every carbon source $i$ not in the nogrowth media has $U_{nogrowth,i} = 0$. \\ Every carbon source $j$ in the nogrowth media has $U_{nogrowth,j} > 0$} \\
+        stoichiometric_matrix.T @ m + c == r,  # & S^Tm +c = r \\
+        r <= omega * (1 - z),  # & r_i\leq\Omega_i\cdot(1-z_i) & \text{for $i\neq$ lactose. This constraint ensures that lactose uptake is the only tight constraint in the model. Every other reaction with a tight constraint cannot be part of the model.}\\
+        r[nogrowth_carbon_source_idx] <= 0,  # & r_{lactose_uptake} \leq 0 \\
+        v_nogrowth[biomass_idx] <= maximum_nogrowth,  # v_{biomass} \leq\text{minimal growth} \\
+    ]
+
+def growth_clause(v_growth: Variable, biomass_idx: int, lower_bound_growth: np.array, upper_bound_growth: np.array, stoichiometric_matrix: np.array, z: Variable, minimum_growth: float):
+    """Constraints that enforce growth in growth conditions.
+    v_growth: Variable representing the flux of reactions in the growth conditions. $w_{growth}$
+    biomass_idx: Index of the biomass reaction. $w_{biomass}$
+    lower_bound_growth: Lower bound for the exchange reactions. $L_{growth}$
+    upper_bound_growth: Upper bound for the exchange reactions. $U_{growth}$
+    stoichiometric_matrix: Stoichiometric matrix. $S$
+    z: Variable representing the binary decision for each reaction. $z$
+    minimum_growth: Minimum biomass reaction flux to achieve growth. $\text{minimal growth}$
+    """
+    return [
+        stoichiometric_matrix @ v_growth == 0,  # Sw= 0 \\
+        diag(lower_bound_growth) @ z <= v_growth,  # & L_{growth,i} \cdot z_i \leq w_i \\
+        v_growth <= diag(upper_bound_growth) @ z,  # 0\leq w_i\leq U_{growth,i}\cdot z_i \\
+        v_growth[biomass_idx] >= minimum_growth  # w_{biomass} \geq \text{minimal growth} 
+    ]
