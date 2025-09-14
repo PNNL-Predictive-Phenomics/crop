@@ -11,7 +11,7 @@ from cvxpy import Minimize, Problem, Variable, diag
 
 def run_crop_algorithm(
     test_crop_model, phenotype_data, media_conditions, biomass_rxn='BIOMASS', maximum_nogrowth=1, minimum_growth=2,
-    atp_maintenance_rxn="ATPM", atp_maintenance_lower_bound=2 
+    atp_maintenance_rxn="ATPM", atp_maintenance_lower_bound=2, solver='SCIPY'
 ):
     """
     Run the CROP algorithm on the test model with the given phenotype data and media conditions.
@@ -99,7 +99,7 @@ def run_crop_algorithm(
     )  # w_{ATP} \geq \text{atp maintenance} \\
     # z\in \{0,1\} \\
     # \end{array}\end{equation}$$
-    problem.solve(verbose=True, solver='GUROBI')
+    problem.solve(verbose=True, solver=solver)
     solution = pd.DataFrame(
         {"r": r.value, "z": z.value, "v_nogrowth": v_nogrowth.value, "v_growth": v_growth.value},
         index=S.columns,
