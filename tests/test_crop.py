@@ -931,6 +931,21 @@ class TestApiUtilityFunctions:
         # Should have ATP maintenance set
         assert result.loc["ATPM", "glucose"] == 2.5
 
+    def test_get_lower_bound_for_nogrowth_conditions(self, mock_model, sample_phenotype_data, sample_media_conditions):
+        """Test get_lower_bound_for_nogrowth_conditions function"""
+        from crop.api import get_lower_bound_for_nogrowth_conditions
+        
+        result = get_lower_bound_for_nogrowth_conditions(
+            mock_model,
+            sample_phenotype_data,
+            sample_media_conditions
+        )
+        
+        assert isinstance(result, pd.DataFrame)
+        assert "lactose" in result.columns
+        assert result.loc["EX_lac", "lactose"] == -5.0  # Lactose media condition
+        assert result.loc["EX_glc", "lactose"] == 0.0  # Not in nogrowth media
+
     def test_get_upper_bound_for_conditions(self, mock_model, sample_phenotype_data, sample_media_conditions):
         """Test get_upper_bound_for_conditions function"""
         from crop.api import get_upper_bound_for_conditions, get_growth_conditions
