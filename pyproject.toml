@@ -1,7 +1,77 @@
 # See https://setuptools.readthedocs.io/en/latest/build_meta.html
 [build-system]
-requires = ["setuptools", "wheel"]
-build-backend = "setuptools.build_meta:__legacy__"
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "crop"
+version = "0.0.1-dev"
+description = "Consistent Reproduction of Phenotype"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+    {name = "Jeremy Zucker", email = "jeremy.zucker@pnnl.gov"},
+]
+maintainers = [
+    {name = "Jeremy Zucker", email = "jeremy.zucker@pnnl.gov"},
+]
+classifiers = [
+    "Development Status :: 1 - Planning",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Framework :: Pytest",
+    "Framework :: tox",
+    "Framework :: Sphinx",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3 :: Only",
+]
+keywords = ["snekpack", "cookiecutter"]
+dependencies = [
+    "more_itertools",
+    "tqdm",
+    "click",
+    "more_click",
+    "cvxpy",
+    "cobra",
+    "pandas",
+    "pyarrow",
+]
+
+[project.urls]
+Homepage = "https://github.com/pnnl-predictive-phenomics/crop"
+Download = "https://github.com/pnnl-predictive-phenomics/crop/releases"
+Tracker = "https://github.com/pnnl-predictive-phenomics/crop/issues"
+Source = "https://github.com/pnnl-predictive-phenomics/crop"
+Documentation = "https://crop.readthedocs.io"
+
+[project.optional-dependencies]
+tests = [
+    "pytest",
+    "coverage",
+]
+docs = [
+    "sphinx",
+    "sphinx-rtd-theme",
+    "sphinx-click",
+    "sphinx-autodoc-typehints",
+    "sphinx_automodapi",
+]
+
+[project.scripts]
+crop = "crop.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-dir]
+"" = "src"
 
 [tool.black]
 line-length = 100
