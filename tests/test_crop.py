@@ -1103,8 +1103,7 @@ def test_multi_condition_crop_algorithm_with_fixtures(multi_media_conditions, mu
     print(f"CROP suggested removing reactions: {suggested_removals}")
     # Should suggest removing both problematic reactions
     expected_reactions = {"LACutil", "SORButil"}
-    suggested_set = set(suggested_removals)
-    assert expected_reactions == suggested_set, f"Expected {expected_reactions} equals {suggested_set}"
+    assert expected_reactions == suggested_removals, f"Expected {expected_reactions} equals {suggested_removals}"
         
     #except Exception as e:
         # Fallback for solver issues
