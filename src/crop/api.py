@@ -6,6 +6,7 @@ import numpy as np
 from cvxpy import Minimize, Problem, Variable, diag
 import pandas as pd
 import cobra
+from cobra.util.array import create_stoichiometric_matrix
 import numpy as np
 from cvxpy import Minimize, Problem, Variable, diag
 
@@ -131,95 +132,139 @@ def run_crop_algorithm(
     >>> print(f"Suggested removals: {removals}")
     """
     np.random.seed(42)  # For reproducibility
-    phenotype_conditions = build_phenotype_conditions(media_conditions, phenotype_data)
-    # Set the media conditions
-    S = cobra.util.array.create_stoichiometric_matrix(test_crop_model, array_type="DataFrame")
-    nmets, nrxns = S.shape
+    stoichiometric_frame: pd.DataFrame = create_stoichiometric_matrix(
+        test_crop_model, array_type="DataFrame"
+    )
+    stoichiometric_matrix = stoichiometric_frame.to_numpy()
+    reaction_ids = stoichiometric_frame.columns
+    nmets, nrxns = stoichiometric_frame.shape
     z = Variable(nrxns, boolean=True)
-    r = Variable(nrxns)
-    m = Variable(nmets)
-    v_nogrowth = Variable(nrxns)
-    v_growth = Variable(nrxns)
     omega = 1000
     weights = np.ones(nrxns)
-    lower_bound_growth = pd.Series(
-        {
-            rxn.id: (
-                -phenotype_conditions["growth"][rxn.id]
-                if rxn.id in phenotype_conditions["growth"]
-                else 0
-            )
-            for rxn in test_crop_model.reactions
-        }
-    )
-    if atp_maintenance_rxn in lower_bound_growth.index:
-        lower_bound_growth[atp_maintenance_rxn] = atp_maintenance_lower_bound
-    lower_bound_nogrowth = pd.Series(
-        {
-            rxn.id: (
-                -phenotype_conditions["nogrowth"][rxn.id]
-                if rxn.id in phenotype_conditions["nogrowth"]
-                else 0
-            )
-            for rxn in test_crop_model.reactions
-        }
-    )
-    upper_bound_growth = pd.Series(
-        {
-            rxn.id: minimum_growth if rxn.id not in phenotype_conditions["growth"] else 0
-            for rxn in test_crop_model.reactions
-        }
-    )
-    upper_bound_nogrowth = pd.Series(
-        {
-            rxn.id: maximum_nogrowth if rxn.id not in phenotype_conditions["nogrowth"] else 0
-            for rxn in test_crop_model.reactions
-        }
-    )
-    nogrowth_carbon_sources = [
-        carbon_source for carbon_source, uptake_rate in phenotype_conditions["nogrowth"].items()
-        if uptake_rate != 0
+    growth_conditions = [
+        condition for condition in get_growth_conditions(phenotype_data)
+        if condition in media_conditions
     ]
-    print(f"Phenotype conditions: {phenotype_conditions}")
-    print(f"Media conditions: {media_conditions}")
-    print(f"Phenotype data: {phenotype_data}")
-    print(f"nogrowth carbon sources: {nogrowth_carbon_sources}")
-    nogrowth_carbon_source = sorted(nogrowth_carbon_sources)[0]
-    # growth_carbon_source = [carbon_source for carbon_source in media_conditions['growth']
-    #                         if carbon_source !=0][0]
-    nogrowth_carbon_source_idx = lower_bound_nogrowth.index.get_loc(nogrowth_carbon_source)
-    biomass_idx = lower_bound_nogrowth.index.get_loc(biomass_rxn)
+    nogrowth_conditions = [
+        condition for condition in get_nogrowth_conditions(phenotype_data)
+        if condition in media_conditions
+    ]
+
+    if not growth_conditions:
+        raise ValueError("No growth condition found where observed==growth and predicted==growth.")
+    if not nogrowth_conditions:
+        raise ValueError("No nogrowth condition found where observed==no_growth and predicted==growth.")
+
+    lower_bound_growth = get_lower_bound_for_growth_conditions(
+        test_crop_model,
+        phenotype_data,
+        media_conditions,
+        atp_maintenance_rxn=atp_maintenance_rxn,
+        atp_maintenance_lower_bound=atp_maintenance_lower_bound,
+    )
+    lower_bound_nogrowth = get_lower_bound_for_nogrowth_conditions(
+        test_crop_model,
+        phenotype_data,
+        media_conditions,
+    )
+    upper_bound_growth = get_upper_bound_for_growth_conditions(
+        test_crop_model,
+        phenotype_data,
+        media_conditions,
+        minimum_growth=minimum_growth,
+    )
+    upper_bound_nogrowth = get_upper_bound_for_nogrowth_conditions(
+        test_crop_model,
+        phenotype_data,
+        media_conditions,
+        maximum_nogrowth=maximum_nogrowth,
+    )
+    biomass_idx = reaction_ids.get_loc(biomass_rxn)
     c = np.zeros(nrxns)
     c[biomass_idx] = 1
 
-    # $$\begin{equation}\begin{array}{l}
-    problem = Problem(
-        Minimize(weights.T @ (1 - z)),[ # \min_z weights^T(1-z) \\  
-            # \begin{array}{lll}
-                v_nogrowth[biomass_idx] == lower_bound_nogrowth[nogrowth_carbon_source] * r[nogrowth_carbon_source_idx],  # & v_{biomass} = U_{nogrowth,lactose}r_{lactose} \\
-                S.values @ v_nogrowth == 0,  # & Sv_{nogrowth}= 0 & \text{inner problem} \\
-                diag(lower_bound_nogrowth.values) @ z <= v_nogrowth,
-                v_nogrowth <= diag(upper_bound_nogrowth.values)@ z,  # & 0\leq v_i\leq U_{nogrowth,i}\cdot z_i & \text{every carbon source $i$ not in the nogrowth media has $U_{nogrowth,i} = 0$. \\ Every carbon source $j$ in the nogrowth media has $U_{nogrowth,j} > 0$} \\
-                S.T.values @ m + c == r,  # & S^Tm +c = r \\
-                r <= omega * (1 - z),  # & r_i\leq\Omega_i\cdot(1-z_i) & \text{for $i\neq$ lactose. This constraint ensures that lactose uptake is the only tight constraint in the model. Every other reaction with a tight constraint cannot be part of the model.}\\
-                r[nogrowth_carbon_source_idx] <= 0,  # & r_{lactose} \geq 0 \\
-            # \end{array}\\
-            v_nogrowth[biomass_idx] <= maximum_nogrowth,  # v_{biomass} \leq\text{minimal growth} \\
-            S.values @ v_growth == 0,  # Sw= 0 \\
-            diag(lower_bound_growth.values) @ z <= v_growth,
-            v_growth <= diag(upper_bound_growth.values) @ z,  # 0\leq w_i\leq U_{growth,i}\cdot z_i \\
-            v_growth[biomass_idx] >= minimum_growth,  # w_{biomass} \geq \text{minimal growth} \\
-        ] #+ non_removable_z ,# z_i = 1 \text{ for all non-removable reactions } i \\
-    )  # w_{ATP} \geq \text{atp maintenance} \\
-    # z\in \{0,1\} \\
-    # \end{array}\end{equation}$$
+    print(f"Growth conditions: {growth_conditions}")
+    print(f"No-growth conditions: {nogrowth_conditions}")
+    print(f"Media conditions: {media_conditions}")
+    print(f"Phenotype data: {phenotype_data}")
+
+    constraints = []
+    nogrowth_fluxes: Dict[str, Variable] = {}
+    growth_fluxes: Dict[str, Variable] = {}
+    dual_values: Dict[str, Variable] = {}
+
+    for condition in nogrowth_conditions:
+        v_nogrowth = Variable(nrxns, name=f"v_nogrowth_{condition}")
+        r = Variable(nrxns, name=f"r_{condition}")
+        m = Variable(nmets, name=f"m_{condition}")
+        nogrowth_fluxes[condition] = v_nogrowth
+        dual_values[condition] = r
+
+        lower_bound_condition = lower_bound_nogrowth[condition]
+        upper_bound_condition = upper_bound_nogrowth[condition]
+        carbon_sources = [
+            carbon_source
+            for carbon_source, uptake_rate in lower_bound_condition.items()
+            if uptake_rate < 0
+        ]
+        if not carbon_sources:
+            raise ValueError(f"No carbon source found for nogrowth condition '{condition}'.")
+
+        carbon_source = min(str(carbon_source) for carbon_source in carbon_sources)
+        carbon_source_idx = reaction_ids.get_loc(carbon_source)
+        print(f"No-growth carbon sources for {condition}: {carbon_sources}")
+
+        constraints.extend(
+            [
+                v_nogrowth[biomass_idx]
+                == lower_bound_condition[carbon_source] * r[carbon_source_idx],
+                stoichiometric_matrix @ v_nogrowth == 0,
+                diag(lower_bound_condition.values) @ z <= v_nogrowth,
+                v_nogrowth <= diag(upper_bound_condition.values) @ z,
+                stoichiometric_matrix.T @ m + c == r,
+                r <= omega * (1 - z),
+                r[carbon_source_idx] <= 0,
+                v_nogrowth[biomass_idx] <= maximum_nogrowth,
+            ]
+        )
+
+    for condition in growth_conditions:
+        v_growth = Variable(nrxns, name=f"v_growth_{condition}")
+        growth_fluxes[condition] = v_growth
+
+        lower_bound_condition = lower_bound_growth[condition]
+        upper_bound_condition = upper_bound_growth[condition]
+        constraints.extend(
+            [
+                stoichiometric_matrix @ v_growth == 0,
+                diag(lower_bound_condition.values) @ z <= v_growth,
+                v_growth <= diag(upper_bound_condition.values) @ z,
+                v_growth[biomass_idx] >= minimum_growth,
+            ]
+        )
+
+    problem = Problem(Minimize(weights.T @ (1 - z)), constraints)
     problem.solve(verbose=True, solver=solver)
-    solution = pd.DataFrame(
-        {"r": r.value, "z": z.value, "v_nogrowth": v_nogrowth.value, "v_growth": v_growth.value},
-        index=S.columns,
-    )
     if problem.status != "optimal":
         raise ValueError("Infeasible problem")
+
+    solution_dict = {"z": z.value}
+    if nogrowth_conditions:
+        first_nogrowth = nogrowth_conditions[0]
+        solution_dict["r"] = dual_values[first_nogrowth].value
+        solution_dict["v_nogrowth"] = nogrowth_fluxes[first_nogrowth].value
+    if growth_conditions:
+        first_growth = growth_conditions[0]
+        solution_dict["v_growth"] = growth_fluxes[first_growth].value
+
+    for condition, dual in dual_values.items():
+        solution_dict[f"r__{condition}"] = dual.value
+    for condition, flux in nogrowth_fluxes.items():
+        solution_dict[f"v_nogrowth__{condition}"] = flux.value
+    for condition, flux in growth_fluxes.items():
+        solution_dict[f"v_growth__{condition}"] = flux.value
+
+    solution = pd.DataFrame(solution_dict, index=reaction_ids)
     zero_z = np.isclose(solution['z'], 0)
     print(f"Zero Z: ")
     print(solution['z'])
