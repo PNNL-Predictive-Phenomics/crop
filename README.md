@@ -44,6 +44,77 @@ Consistent Reproduction of Phenotype (CROP) is an mixed integer linear programmi
 
 See the [CROP Notebook](https://github.com/pnnl-predictive-phenomics/crop/blob/main/docs/notebook/CROP.ipynb).
 
+## Verify an Applied Correction
+
+After applying CROP's suggested reaction removals to a model, verify every observed
+phenotype with fresh flux balance analysis:
+
+```bash
+crop verify \
+    --model corrected-model.json \
+    --phenotypes phenotypes.json \
+    --media media.json
+```
+
+The corrected model may be COBRA JSON (`.json`) or SBML (`.xml` or `.sbml`). The
+phenotype file is keyed by condition:
+
+```json
+{
+    "glucose": {"observed": "growth", "predicted": "growth"},
+    "lactose": {"observed": "no_growth", "predicted": "growth"}
+}
+```
+
+The media file uses COBRA's convention in which negative lower bounds allow uptake:
+
+```json
+{
+    "glucose": {"EX_glc": -10.0, "EX_lac": 0.0},
+    "lactose": {"EX_glc": 0.0, "EX_lac": -10.0}
+}
+```
+
+By default, observed growth passes when biomass is at least `2.0`, and observed
+no-growth passes when biomass is at most `1.0` or FBA is infeasible. Configure these
+limits with `--minimum-growth` and `--maximum-nogrowth`. Use `--biomass-rxn` to
+override the model's objective reaction.
+
+For automation, request JSON and optionally write it to a file:
+
+```bash
+crop verify \
+    --model corrected-model.xml \
+    --phenotypes phenotypes.json \
+    --media media.json \
+    --format json \
+    --output verification.json
+```
+
+The command exits with status `0` when all observations are reproduced, `1` when
+verification completes with phenotype failures, and `2` for invalid inputs.
+
+## Compare Single- and Multi-Phenotype Reconciliation
+
+Generate a deterministic toy comparison of independent one-phenotype-at-a-time
+reconciliation and CROP's joint multi-phenotype constraints:
+
+```bash
+uv run python scripts/compare_growmatch_crop.py --output-dir comparison_output
+```
+
+The independent arm is GrowMatch-style: each false-growth phenotype is solved with
+only its local growth control, and the two deletion sets are then combined. It uses
+CROP's optimizer to isolate the effect of condition scope; it does not invoke the
+separate GrowMatch implementation or claim numerical parity with its genome-scale
+model.
+
+The script applies every suggested deletion set and reruns FBA under all four media.
+It writes a biomass-flux plot, a phenotype match matrix, the underlying CSV, and the
+reaction-removal sets as JSON. In this cross-coupled model, independent fixes suppress
+both false-growth phenotypes but clobber both omitted growth controls. Joint CROP
+preserves both growth phenotypes while suppressing both false-growth phenotypes.
+
 ## 🚀 Installation
 
 <!-- Uncomment this section after your first ``tox -e finish``

@@ -1,3 +1,7 @@
+"""This script generates an example metabolic model in SBML format using the CobraPy library.
+It creates a simple model with a few metabolites and reactions, writes it to an SBML file,
+and validates the model."""
+
 from pprint import pprint
 
 import cobra
