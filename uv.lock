@@ -985,7 +985,7 @@ requires-dist = [
     { name = "pyarrow" },
     { name = "pytest", marker = "extra == 'tests'" },
     { name = "pytest-cov", marker = "extra == 'tests'" },
-    { name = "sphinx", marker = "extra == 'docs'" },
+    { name = "sphinx", marker = "extra == 'docs'", specifier = "<9" },
     { name = "sphinx-autodoc-typehints", marker = "extra == 'docs'" },
     { name = "sphinx-automodapi", marker = "extra == 'docs'" },
     { name = "sphinx-click", marker = "extra == 'docs'" },

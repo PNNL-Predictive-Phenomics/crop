@@ -280,9 +280,9 @@ def brute_force_multi_condition_minimal_removals(
 
             matches_all_conditions = True
             for condition_name, should_grow in expected_growth.items():
-                objective_value = apply_medium(
-                    model_candidate, media_conditions[condition_name]
-                ).optimize().objective_value
+                objective_value = (
+                    apply_medium(model_candidate, media_conditions[condition_name]).optimize().objective_value
+                )
                 if should_grow and objective_value < growth_threshold:
                     matches_all_conditions = False
                     break
@@ -341,12 +341,8 @@ def test_crop_algorithm_matches_bruteforce_oracle():
     for reaction_id in suggested_removals:
         corrected_model.reactions.get_by_id(reaction_id).remove_from_model()
 
-    growth_solution = apply_medium(
-        corrected_model, media_conditions["lactose_with_helper"]
-    ).optimize()
-    nogrowth_solution = apply_medium(
-        corrected_model, media_conditions["lactose_only"]
-    ).optimize()
+    growth_solution = apply_medium(corrected_model, media_conditions["lactose_with_helper"]).optimize()
+    nogrowth_solution = apply_medium(corrected_model, media_conditions["lactose_only"]).optimize()
 
     assert growth_solution.objective_value >= 2.0
     assert nogrowth_solution.objective_value <= 1.0
@@ -366,9 +362,7 @@ def test_multi_condition_oracle_model_has_unique_minimal_fix():
         "no_carbon": False,
     }
 
-    minimal_removals = brute_force_multi_condition_minimal_removals(
-        model, media_conditions, expected_growth
-    )
+    minimal_removals = brute_force_multi_condition_minimal_removals(model, media_conditions, expected_growth)
 
     assert minimal_removals == {frozenset({"LAC_bypass", "SORB_bypass"})}
 
@@ -395,9 +389,7 @@ def test_crop_algorithm_matches_multicondition_oracle():
         "no_carbon": False,
     }
 
-    oracle_minimal_removals = brute_force_multi_condition_minimal_removals(
-        model, media_conditions, expected_growth
-    )
+    oracle_minimal_removals = brute_force_multi_condition_minimal_removals(model, media_conditions, expected_growth)
     suggested_removals, _ = run_crop_algorithm(
         model,
         phenotype_data,
@@ -468,9 +460,7 @@ def test_example_mixed_outcomes_ignores_non_target_categories():
         "no_carbon": False,
     }
 
-    oracle_minimal_removals = brute_force_multi_condition_minimal_removals(
-        model, media_conditions, expected_growth
-    )
+    oracle_minimal_removals = brute_force_multi_condition_minimal_removals(model, media_conditions, expected_growth)
 
     suggested_removals, _ = run_crop_algorithm(model, phenotype_data, media_conditions)
 

@@ -3,10 +3,10 @@
 """Comprehensive tests for version module."""
 
 import unittest
-from unittest.mock import patch, MagicMock
 from subprocess import CalledProcessError
+from unittest.mock import patch
 
-from crop.version import get_version, get_git_hash, VERSION
+from crop.version import VERSION, get_git_hash, get_version
 
 
 class TestVersion(unittest.TestCase):

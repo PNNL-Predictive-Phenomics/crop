@@ -76,6 +76,8 @@ def _format_table(report: VerificationReport) -> str:
   widths = [max(len(str(row[index])) for row in [headers] + rows) for index in range(len(headers))]
 
   def format_row(row):
+    """Format one table row using the calculated column widths."""
+
     return "  ".join(str(value).ljust(widths[index]) for index, value in enumerate(row))
 
   separator = "  ".join("-" * width for width in widths)

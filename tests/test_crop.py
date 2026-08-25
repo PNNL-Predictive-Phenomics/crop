@@ -1,12 +1,15 @@
 """Test functionalities for removing reactions to prevent growth."""
 
+import sys
+import types
+from itertools import combinations
+
 import cobra
 import pytest
-from itertools import combinations
-import types
 from cobra import Metabolite, Model, Reaction
-from crop import run_crop_algorithm, build_phenotype_conditions
-import sys
+
+from crop import build_phenotype_conditions, run_crop_algorithm
+
 
 def create_test_model():
     """
@@ -143,13 +146,12 @@ def create_test_model():
     # Set objective
     model.objective = "BIOMASS"
     for rxn in model.reactions:
-        print(
-            f"Reaction {rxn.id}: {rxn.name}\t{rxn.build_reaction_string()}\t{rxn.lower_bound} < {rxn.upper_bound}"
-        )
+        print(f"Reaction {rxn.id}: {rxn.name}\t{rxn.build_reaction_string()}\t{rxn.lower_bound} < {rxn.upper_bound}")
     cobra.io.save_json_model(model, "test_crop_model.json")
     cobra.io.write_sbml_model(model, "test_crop_model.xml")
 
     return model
+
 
 def create_multi_condition_test_model():
     """
@@ -178,7 +180,7 @@ def create_multi_condition_test_model():
     - Still grow on glucose
     - Still grow on pyruvate
     - No longer grow on lactose
-    - No longer grow on sorbose 
+    - No longer grow on sorbose
     """
 
     model = Model("test_multi_condition_crop_model")
@@ -344,13 +346,12 @@ def create_multi_condition_test_model():
     # Set objective
     model.objective = "BIOMASS"
     for rxn in model.reactions:
-        print(
-            f"Reaction {rxn.id}: {rxn.name}\t{rxn.build_reaction_string()}\t{rxn.lower_bound} < {rxn.upper_bound}"
-        )
+        print(f"Reaction {rxn.id}: {rxn.name}\t{rxn.build_reaction_string()}\t{rxn.lower_bound} < {rxn.upper_bound}")
     cobra.io.save_json_model(model, "test_multi_condition_crop_model.json")
     cobra.io.write_sbml_model(model, "test_multi_condition_crop_model.xml")
 
     return model
+
 
 def create_old_test_model():
     """
@@ -486,12 +487,12 @@ def create_old_test_model():
 
     # Set objective
     model.objective = "BIOMASS"
-    #for rxn in model.reactions:
-        #print(
-        #    f"Reaction {rxn.id}: {rxn.name}\t{rxn.build_reaction_string()}\t{rxn.lower_bound} < {rxn.upper_bound}"
-        #)
-    #cobra.io.save_json_model(model, "test_crop_model.json")
-    #cobra.io.write_sbml_model(model, "test_crop_model.xml")
+    # for rxn in model.reactions:
+    # print(
+    #    f"Reaction {rxn.id}: {rxn.name}\t{rxn.build_reaction_string()}\t{rxn.lower_bound} < {rxn.upper_bound}"
+    # )
+    # cobra.io.save_json_model(model, "test_crop_model.json")
+    # cobra.io.write_sbml_model(model, "test_crop_model.xml")
 
     return model
 
@@ -572,6 +573,7 @@ def media_conditions():
         "no_carbon": {"EX_glc": 0.0, "EX_lac": 0.0},
     }
 
+
 @pytest.fixture
 def multi_media_conditions():
     return {
@@ -593,6 +595,7 @@ def multi_phenotype_data():
         "g6p": {"observed": "growth", "predicted": "growth"},
     }
 
+
 @pytest.fixture
 def phenotype_data():
     return {
@@ -610,7 +613,9 @@ def phenotype_observation_key():
         "lactose": {"observation": "no_growth", "predicted": "growth"},
     }
 
+
 # Test functions
+
 
 def test_basic_mapping_and_keys(build, media_conditions, phenotype_data):
     result = build(media_conditions, phenotype_data)
@@ -627,7 +632,6 @@ def test_basic_mapping_and_keys(build, media_conditions, phenotype_data):
     # Growth condition chosen should be "glucose" -> EX_glc uptake magnitude 10
     assert growth["EX_glc"] == 10.0
     assert growth["EX_lac"] == 0.0
-    
 
     # Nogrowth condition chosen should be "lactose" -> EX_lac 5, EX_glc 0
     assert nogrowth["EX_glc"] == 0.0
@@ -665,7 +669,7 @@ def test_select_specific_conditions(build, media_conditions, phenotype_data):
     # Selected explicit growth condition should reflect -7 -> +7 magnitude
     assert growth["EX_glc"] == 7.0
     # Keys from union should still appear
-    assert "EX_lac" in growth 
+    assert "EX_lac" in growth
     # Selected explicit nogrowth condition should be lactose as before
     assert nogrowth["EX_lac"] == 5.0
 
@@ -704,8 +708,8 @@ def test_no_nogrowth_candidate_raises(build):
 
 def test_union_of_exchanges_included(build):
     media = {
-        "c1": {"EX_a": -3.0},     # only EX_a here
-        "c2": {"EX_b": -4.0},     # only EX_b here
+        "c1": {"EX_a": -3.0},  # only EX_a here
+        "c2": {"EX_b": -4.0},  # only EX_b here
     }
     pheno = {
         "c1": {"observed": "growth", "predicted": "growth"},
@@ -722,6 +726,7 @@ def test_union_of_exchanges_included(build):
     # Magnitudes flip sign for uptakes, zero otherwise
     assert growth["EX_a"] == 3.0 and growth["EX_b"] == 0.0
     assert nogrowth["EX_b"] == 4.0 and nogrowth["EX_a"] == 0.0
+
 
 def test_model_creation(test_model):
     """Test that the model is created correctly"""
@@ -746,18 +751,14 @@ def test_initial_lactose_growth_incorrect(test_model, media_conditions):
     solution = lactose_model.optimize()
 
     assert solution.status == "optimal"
-    assert (
-        solution.objective_value > 0.001
-    ), "Error, the initial model should grow on lactose due to LACutil reaction"
+    assert solution.objective_value > 0.001, "Error, the initial model should grow on lactose due to LACutil reaction"
 
 
 def test_no_carbon_no_growth(test_model, media_conditions):
     """Test that the model doesn't grow without carbon source"""
     no_carbon_model = apply_medium(test_model, media_conditions["no_carbon"])
     solution = no_carbon_model.optimize()
-    assert (
-        solution.objective_value < 0.001
-    ), "Error, the initial model should not grow without carbon source "
+    assert solution.objective_value < 0.001, "Error, the initial model should not grow without carbon source "
 
 
 @pytest.mark.parametrize(
@@ -775,9 +776,7 @@ def test_initial_growth_patterns(test_model, media_conditions, medium_name, expe
         assert solution.objective_value < 0.001
 
 
-def test_reaction_removal_fixes_lactose(
-    test_model, media_conditions, expected_problematic_reaction
-):
+def test_reaction_removal_fixes_lactose(test_model, media_conditions, expected_problematic_reaction):
     """Test that removing the problematic reaction prevents lactose growth"""
     # Remove the problematic reaction
     model_corrected = test_model.copy()
@@ -790,9 +789,7 @@ def test_reaction_removal_fixes_lactose(
     assert solution.objective_value < 0.001
 
 
-def test_reaction_removal_preserves_glucose_growth(
-    test_model, media_conditions, expected_problematic_reaction
-):
+def test_reaction_removal_preserves_glucose_growth(test_model, media_conditions, expected_problematic_reaction):
     """Test that removing the problematic reaction doesn't affect glucose growth"""
     # Remove the problematic reaction
     model_corrected = test_model.copy()
@@ -836,9 +833,7 @@ def test_growth_after_reaction_removal(
         assert solution.objective_value < 0.001
 
 
-def test_crop_algorithm_integration(
-    test_model, media_conditions, phenotype_data, expected_problematic_reaction
-):
+def test_crop_algorithm_integration(test_model, media_conditions, phenotype_data, expected_problematic_reaction):
     """
     Test template for integration with your CROP algorithm
     Replace the simulated result with your actual CROP algorithm call
@@ -848,7 +843,7 @@ def test_crop_algorithm_integration(
     suggested_removals, _ = run_crop_algorithm(test_model, phenotype_data, media_conditions)
 
     # For now, simulate the expected result
-    #suggested_removals = ["LACutil"]
+    # suggested_removals = ["LACutil"]
 
     # Test that CROP suggests the correct reaction for removal
     assert expected_problematic_reaction in suggested_removals
@@ -861,23 +856,23 @@ def test_crop_algorithm_integration(
     # Verify the fix works
     lactose_model = apply_medium(model_corrected, media_conditions["lactose"])
     lactose_solution = lactose_model.optimize()
-    assert (
-        lactose_solution.objective_value < 0.001
-    ), f"Error, the model should not grow on lactose after removing {suggested_removals}"
+    assert lactose_solution.objective_value < 0.001, (
+        f"Error, the model should not grow on lactose after removing {suggested_removals}"
+    )
 
     # Verify other conditions still work
     glucose_model = apply_medium(model_corrected, media_conditions["glucose"])
     glucose_solution = glucose_model.optimize()
-    assert (
-        glucose_solution.objective_value > 0.001
-    ), f"Error, the model should still grow on glucose after removing {suggested_removals}"
+    assert glucose_solution.objective_value > 0.001, (
+        f"Error, the model should still grow on glucose after removing {suggested_removals}"
+    )
 
     # Verify no carbon condition
     no_carbon_model = apply_medium(model_corrected, media_conditions["no_carbon"])
     no_carbon_solution = no_carbon_model.optimize()
-    assert (
-        no_carbon_solution.objective_value < 0.001
-    ), f"Error, the model should not grow without carbon source after removing {suggested_removals}"
+    assert no_carbon_solution.objective_value < 0.001, (
+        f"Error, the model should not grow without carbon source after removing {suggested_removals}"
+    )
 
 
 def test_specific_reaction_exists(test_model, expected_problematic_reaction):
@@ -905,22 +900,18 @@ def test_reaction_removal_is_reversible(test_model, expected_problematic_reactio
 
 # Integration test for complete CROP workflow
 @pytest.mark.integration
-def test_complete_crop_workflow(
-    test_model, media_conditions, phenotype_data, expected_problematic_reaction
-):
+def test_complete_crop_workflow(test_model, media_conditions, phenotype_data, expected_problematic_reaction):
     """Integration test for the complete CROP workflow"""
 
     # Step 1: Verify initial problematic behavior
     lactose_model = apply_medium(test_model, media_conditions["lactose"])
     initial_solution = lactose_model.optimize()
-    assert (
-        initial_solution.objective_value > 0.001
-    ), "Error, the initial model should grow on lactose"
+    assert initial_solution.objective_value > 0.001, "Error, the initial model should grow on lactose"
 
     # Step 2: Run CROP algorithm (simulated)
     suggested_removals, _ = run_crop_algorithm(test_model, phenotype_data, media_conditions)
-    #suggested_removals = [expected_problematic_reaction]  # Simulated result
-    #assert expected_problematic_reaction in suggested_removals
+    # suggested_removals = [expected_problematic_reaction]  # Simulated result
+    # assert expected_problematic_reaction in suggested_removals
     # Step 3: Apply suggested changes
     corrected_model = test_model.copy()
     for reaction_id in suggested_removals:
@@ -930,28 +921,26 @@ def test_complete_crop_workflow(
     # Should no longer grow on lactose
     lactose_corrected = apply_medium(corrected_model, media_conditions["lactose"])
     lactose_solution = lactose_corrected.optimize()
-    assert (
-        lactose_solution.objective_value < 0.001
-    ), f"Error, the model should not grow on lactose after removing {suggested_removals}"
+    assert lactose_solution.objective_value < 0.001, (
+        f"Error, the model should not grow on lactose after removing {suggested_removals}"
+    )
 
     # Should still grow on glucose
     glucose_corrected = apply_medium(corrected_model, media_conditions["glucose"])
     glucose_solution = glucose_corrected.optimize()
-    assert (
-        glucose_solution.objective_value > 0.001
-    ), f"Error, the model should still grow on glucose after removing {suggested_removals}"
+    assert glucose_solution.objective_value > 0.001, (
+        f"Error, the model should still grow on glucose after removing {suggested_removals}"
+    )
 
     # Should not grow without carbon source
     no_carbon_corrected = apply_medium(corrected_model, media_conditions["no_carbon"])
     no_carbon_solution = no_carbon_corrected.optimize()
-    assert (
-        no_carbon_solution.objective_value < 0.001
-    ), f"Error, the model should not grow without carbon source after removing {suggested_removals}"
+    assert no_carbon_solution.objective_value < 0.001, (
+        f"Error, the model should not grow without carbon source after removing {suggested_removals}"
+    )
 
 
-def test_multi_condition_returns_both_problematic_reactions(
-    multi_media_conditions, multi_phenotype_data
-):
+def test_multi_condition_returns_both_problematic_reactions(multi_media_conditions, multi_phenotype_data):
     """Regression test: CROP should return an oracle-minimal valid correction set."""
 
     model = create_multi_condition_test_model()
@@ -960,9 +949,7 @@ def test_multi_condition_returns_both_problematic_reactions(
     # growth condition (g6p) is excluded here because it makes the current MILP
     # formulation infeasible for this toy network.
     phenotype_subset = {
-        condition: phenotype
-        for condition, phenotype in multi_phenotype_data.items()
-        if condition != "g6p"
+        condition: phenotype for condition, phenotype in multi_phenotype_data.items() if condition != "g6p"
     }
     suggested_removals, _ = run_crop_algorithm(
         model,
@@ -993,9 +980,7 @@ def test_multi_condition_returns_both_problematic_reactions(
 
             is_valid = True
             for condition in growth_conditions:
-                flux = apply_medium(
-                    model_candidate, multi_media_conditions[condition]
-                ).optimize().objective_value
+                flux = apply_medium(model_candidate, multi_media_conditions[condition]).optimize().objective_value
                 if flux <= 0.001:
                     is_valid = False
                     break
@@ -1003,9 +988,7 @@ def test_multi_condition_returns_both_problematic_reactions(
                 continue
 
             for condition in nogrowth_conditions:
-                flux = apply_medium(
-                    model_candidate, multi_media_conditions[condition]
-                ).optimize().objective_value
+                flux = apply_medium(model_candidate, multi_media_conditions[condition]).optimize().objective_value
                 if flux >= 0.001:
                     is_valid = False
                     break
@@ -1064,6 +1047,3 @@ if __name__ == "__main__":
     # print("pytest test_crop_model.py -v")
     # print("pytest test_crop_model.py -v -k 'test_initial'  # Run only initial tests")
     # print("pytest test_crop_model.py -v -m integration     # Run only integration tests")
-
-
-

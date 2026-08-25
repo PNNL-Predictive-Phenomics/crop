@@ -31,10 +31,18 @@ release = "0.0.1-dev"
 
 # The short X.Y version.
 parsed_version = re.match(
-    "(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)(?:-(?P<release>[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+(?P<build>[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?",
+    r"(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)(?:-(?P<release>[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+(?P<build>[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?",
     release,
 )
-version = parsed_version.expand("\g<major>.\g<minor>.\g<patch>")
+version = parsed_version.expand(r"\g<major>.\g<minor>.\g<patch>")
+
+if "tags" not in globals():
+
+    class _SphinxTagsFallback:
+        def add(self, _tag_name):
+            return None
+
+    tags = _SphinxTagsFallback()
 
 if parsed_version.group("release"):
     tags.add("prerelease")

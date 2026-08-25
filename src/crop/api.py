@@ -90,8 +90,10 @@ def run_crop_algorithm(
     -------
     Tuple[Set[str], pd.DataFrame]
         A tuple containing:
+
         - Set of reaction IDs suggested for removal (where z_i = 0)
         - DataFrame with solution details including columns:
+
           * 'r': dual variable values (reduced costs)
           * 'z': binary inclusion variables (1 = keep, 0 = remove)
           * 'v_nogrowth': flux values in nogrowth condition
@@ -106,17 +108,22 @@ def run_crop_algorithm(
     Notes
     -----
     The algorithm works by:
+
     1. Identifying a nogrowth condition where the model incorrectly predicts growth
     2. Setting up a bi-level MILP that finds reactions whose removal would:
+
        - Prevent growth in the nogrowth condition (biomass ≤ maximum_nogrowth)
        - Maintain growth in the growth condition (biomass ≥ minimum_growth)
+
     3. Minimizing the number of reactions removed (weighted by evidence)
 
     The variable z_i ∈ {0,1} determines whether reaction i is included:
+
     - z_i = 1: reaction is kept in the model
     - z_i = 0: reaction should be removed
 
     The dual variable r_i represents the shadow price on flux bounds:
+
     - r_i > 0: upper bound is constraining
     - r_i < 0: lower bound is constraining
     - r_i ≈ 0: reaction is not at a bound
@@ -357,6 +364,8 @@ def build_phenotype_conditions(
     """
 
     def obs_key(d: dict) -> str:
+        """Return the observed phenotype using either supported key."""
+
         # be tolerant if data uses "observation" instead of "observed"
         return d.get("observed", d.get("observation", ""))
 
@@ -390,6 +399,8 @@ def build_phenotype_conditions(
     all_exchanges = set().union(*[mc.keys() for mc in media_conditions.values()])
 
     def to_pheno(m: dict) -> dict:
+        """Convert COBRA uptake bounds to positive phenotype magnitudes."""
+
         # Flip sign for allowed uptakes (negative in media -> positive magnitude here), else 0.0
         return {rxn: float(-m.get(rxn, 0)) if m.get(rxn, 0) < 0 else 0.0 for rxn in all_exchanges}
 
@@ -924,7 +935,7 @@ def nogrowth_clause(
         Corresponds to $c$ in the formulation.
         Shape: (n_reactions,)
     omega : float
-        Large positive constant (typically 1000) serving as upper bound on |r_i|.
+        Large positive constant (typically 1000) serving as an absolute bound on ``r_i``.
         Corresponds to $\\Omega$ in the formulation.
         The constraint $r_i \\leq \\Omega(1-z_i)$ forces r_i = 0 when z_i = 1.
     nogrowth_carbon_source_name : str

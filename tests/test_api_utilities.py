@@ -267,7 +267,9 @@ class TestApiUtilityFunctions:
                 growth_condition="invalid",
             )
 
-    def test_build_phenotype_conditions_invalid_nogrowth_condition(self, sample_media_conditions, sample_phenotype_data):
+    def test_build_phenotype_conditions_invalid_nogrowth_condition(
+        self, sample_media_conditions, sample_phenotype_data
+    ):
         from crop.api import build_phenotype_conditions
 
         with pytest.raises(KeyError, match="Nogrowth condition 'invalid' not in media_conditions"):
@@ -428,7 +430,7 @@ class TestApiCoverageMaximization:
     @pytest.fixture
     def simple_growth_model(self):
         """Create a minimal viable model for testing edge cases."""
-        from cobra import Model, Reaction, Metabolite
+        from cobra import Metabolite, Model, Reaction
 
         model = Model("simple_test")
 
@@ -463,7 +465,7 @@ class TestApiCoverageMaximization:
 
     def test_infeasible_problem_with_conflicting_bounds(self):
         """Test that infeasible problems are caught and raise appropriate error."""
-        from cobra import Model, Reaction, Metabolite
+        from cobra import Metabolite, Model, Reaction
 
         model = Model("infeasible_test")
 
@@ -557,7 +559,6 @@ class TestApiCoverageMaximization:
         """Test that solution contains expected per-condition flux columns."""
         from tests.test_crop_oracle import (
             create_unique_oracle_model,
-            apply_medium,
         )
 
         model = create_unique_oracle_model()
@@ -632,11 +633,12 @@ class TestApiCoverageMaximization:
 
     def test_bounds_getters_with_heterogeneous_data(self):
         """Test helper functions with complex data structures."""
+        from cobra import Metabolite, Model, Reaction
+
         from crop.api import (
             get_lower_bound_for_nogrowth_conditions,
             get_upper_bound_for_nogrowth_conditions,
         )
-        from cobra import Model, Reaction, Metabolite
 
         model = Model("test")
         rxn1 = Reaction("R1")
@@ -658,9 +660,7 @@ class TestApiCoverageMaximization:
             "cond2": {"observed": "no_growth", "predicted": "growth"},
         }
 
-        lower_bounds = get_lower_bound_for_nogrowth_conditions(
-            model, phenotype_data, media_conditions
-        )
+        lower_bounds = get_lower_bound_for_nogrowth_conditions(model, phenotype_data, media_conditions)
         upper_bounds = get_upper_bound_for_nogrowth_conditions(
             model, phenotype_data, media_conditions, maximum_nogrowth=2.0
         )
