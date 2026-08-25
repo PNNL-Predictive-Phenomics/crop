@@ -42,6 +42,7 @@ dependencies = [
     "cobra",
     "pandas",
     "pyarrow",
+    "matplotlib",
 ]
 
 [project.urls]
@@ -84,6 +85,37 @@ multi_line_output = 3
 line_length = 100
 include_trailing_comma = true
 reverse_relative = true
+
+[tool.ruff]
+line-length = 120
+target-version = "py38"
+extend-exclude = [
+    ".tox",
+    "build",
+    "dist",
+    "docs/build",
+    "docs/notebook",
+    "htmlcov",
+    "coverage_results",
+    ".jupyter",
+    "tests/fixtures",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = [
+    "E203", # whitespace before ':'
+    "E501", # let formatter handle long lines pragmatically
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 20
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*.py" = [
+    "F811", # legacy duplicate fixture names in historical tests
+    "W293", # whitespace-only line noise in legacy tests
+]
 
 [tool.coverage.run]
 source = ["src"]
