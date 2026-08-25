@@ -834,18 +834,15 @@ def test_growth_after_reaction_removal(
 
 
 def test_crop_algorithm_integration(test_model, media_conditions, phenotype_data, expected_problematic_reaction):
-    """
-    Test template for integration with your CROP algorithm
-    Replace the simulated result with your actual CROP algorithm call
-    """
+    """Prefer the evidence-supported correction and verify its phenotypes."""
 
-    # This is where you would call your CROP algorithm
-    suggested_removals, _ = run_crop_algorithm(test_model, phenotype_data, media_conditions)
+    suggested_removals, _ = run_crop_algorithm(
+        test_model,
+        phenotype_data,
+        media_conditions,
+        reaction_weights={"LACutil": 0.5},
+    )
 
-    # For now, simulate the expected result
-    # suggested_removals = ["LACutil"]
-
-    # Test that CROP suggests the correct reaction for removal
     assert expected_problematic_reaction in suggested_removals
 
     # Test that removing suggested reactions fixes the problem
@@ -873,6 +870,28 @@ def test_crop_algorithm_integration(test_model, media_conditions, phenotype_data
     assert no_carbon_solution.objective_value < 0.001, (
         f"Error, the model should not grow without carbon source after removing {suggested_removals}"
     )
+
+
+@pytest.mark.parametrize(
+    ("reaction_weights", "message"),
+    [
+        ({"missing_reaction": 2.0}, "unknown reaction IDs"),
+        ({"LACutil": 0.0}, "positive and finite"),
+        ({"LACutil": float("inf")}, "positive and finite"),
+    ],
+)
+def test_crop_algorithm_rejects_invalid_reaction_weights(
+    test_model, media_conditions, phenotype_data, reaction_weights, message
+):
+    """Reject reaction-weight mappings that cannot define valid penalties."""
+
+    with pytest.raises(ValueError, match=message):
+        run_crop_algorithm(
+            test_model,
+            phenotype_data,
+            media_conditions,
+            reaction_weights=reaction_weights,
+        )
 
 
 def test_specific_reaction_exists(test_model, expected_problematic_reaction):

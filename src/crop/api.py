@@ -2,7 +2,7 @@
 
 """Main code."""
 
-from typing import Callable, Dict, List, Optional, Set, Tuple
+from typing import Callable, Dict, List, Mapping, Optional, Set, Tuple
 
 import cobra
 import numpy as np
@@ -22,6 +22,7 @@ def run_crop_algorithm(
     atp_maintenance_lower_bound: float = 2.0,
     solver: str = "SCIPY",
     verbose: bool = False,
+    reaction_weights: Optional[Mapping[str, float]] = None,
 ) -> Tuple[Set[str], pd.DataFrame]:
     """
     Run the CROP algorithm to identify reactions to remove for fixing phenotype predictions.
@@ -85,6 +86,10 @@ def run_crop_algorithm(
         Some problems may require commercial solvers for better performance.
     verbose : bool, default=False
         Whether CVXPY should print compilation and solver progress.
+    reaction_weights : Mapping[str, float], optional
+        Sparse mapping from reaction IDs to deletion penalties. Reactions not
+        present in the mapping use a penalty of 1.0. Values must be positive
+        and finite; larger values make a reaction less likely to be removed.
 
     Returns
     -------
@@ -149,6 +154,15 @@ def run_crop_algorithm(
     z = Variable(nrxns, boolean=True)
     omega = 1000
     weights = np.ones(nrxns)
+    if reaction_weights is not None:
+        unknown_reactions = set(reaction_weights).difference(reaction_ids)
+        if unknown_reactions:
+            unknown_list = ", ".join(sorted(unknown_reactions))
+            raise ValueError(f"Reaction weights contain unknown reaction IDs: {unknown_list}")
+        for reaction_id, weight in reaction_weights.items():
+            if not np.isfinite(weight) or weight <= 0:
+                raise ValueError(f"Reaction weight for '{reaction_id}' must be positive and finite.")
+            weights[reaction_ids.get_loc(reaction_id)] = weight
     growth_conditions = [
         condition for condition in get_growth_conditions(phenotype_data) if condition in media_conditions
     ]
